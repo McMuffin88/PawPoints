@@ -16,13 +16,28 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   Future<void> _submit() async {
     if (_formKey.currentState!.validate()) {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('herrchen_displayname', _displayNameController.text);
+
+      final displayName = _displayNameController.text.trim();
+      await prefs.setString('herrchen_displayname', displayName);
+
+      // Einladungscode nur erzeugen, wenn er noch nicht existiert
+      String? code = prefs.getString('invite_code');
+      if (code == null || code.isEmpty) {
+        code = _generateInviteCode();
+        await prefs.setString('invite_code', code);
+      }
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const InviteDoggyScreen()),
       );
     }
+  }
+
+  String _generateInviteCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return List.generate(8, (i) => chars[(now + i) % chars.length]).join();
   }
 
   @override
@@ -35,7 +50,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           key: _formKey,
           child: Column(
             children: [
-              const Text('Dein öffentlich sichtbarer Name', style: TextStyle(fontSize: 18)),
+              const Text(
+                'Dein öffentlich sichtbarer Name',
+                style: TextStyle(fontSize: 18),
+              ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _displayNameController,
@@ -56,4 +74,5 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       ),
     );
   }
+
 }

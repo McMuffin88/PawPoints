@@ -62,10 +62,27 @@ await prefs.setString('herrchen_email', _emailController.text);
           key: _formKey,
           child: ListView(
             children: [
-              const Text(
-                "Erstelle dein Herrchen-Konto",
-                style: TextStyle(fontSize: 20),
-              ),
+    const SizedBox(height: 20),
+
+    // 👇 Logo
+Center(
+  child: Image.asset(
+    'assets/logo.png',
+    height: 100,
+    errorBuilder: (context, error, stackTrace) {
+      return const Icon(Icons.image_not_supported, size: 60, color: Colors.grey);
+    },
+  ),
+),
+
+
+    const SizedBox(height: 24),
+
+    const Text(
+      "Erstelle dein Herrchen-Konto",
+      style: TextStyle(fontSize: 20),
+      textAlign: TextAlign.center,
+    ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _usernameController,
