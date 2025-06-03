@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'main.dart'; // Für StartupScreen
-import 'doggy_profile_screen.dart'; // Nächster Schritt nach Codeeingabe
+import 'main.dart'; // für StartupScreen
+import 'doggy_profile_screen.dart'; // für Weiterleitung nach Codeeingabe
 
 class DoggyJoinScreen extends StatefulWidget {
   const DoggyJoinScreen({super.key});
@@ -16,6 +16,7 @@ class _DoggyJoinScreenState extends State<DoggyJoinScreen> {
   void _submit() {
     final code = _codeController.text.trim();
 
+    // Dummyprüfung – später mit echtem Abgleich oder Firestore
     if (code.length == 8) {
       Navigator.push(
         context,
@@ -53,11 +54,15 @@ class _DoggyJoinScreenState extends State<DoggyJoinScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            const Text('Einladungscode vom Herrchen eingeben:', style: TextStyle(fontSize: 18)),
+            const Text(
+              'Einladungscode vom Herrchen eingeben:',
+              style: TextStyle(fontSize: 18),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _codeController,
               decoration: const InputDecoration(labelText: 'Einladungscode'),
+              textCapitalization: TextCapitalization.characters,
             ),
             const SizedBox(height: 24),
             ElevatedButton(

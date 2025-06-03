@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'invite_doggy_screen.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
@@ -12,9 +13,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _displayNameController = TextEditingController();
 
-  void _submit() {
+  Future<void> _submit() async {
     if (_formKey.currentState!.validate()) {
-      // Später kannst du hier Profilinformationen speichern
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('herrchen_displayname', _displayNameController.text);
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const InviteDoggyScreen()),
@@ -50,7 +53,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             ],
           ),
         ),
-      ), // 👈 Das war bei dir offen!
+      ),
     );
   }
 }

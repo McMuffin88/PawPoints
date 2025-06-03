@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'register_screen.dart';
 import 'doggy_join_screen.dart';
 import 'herrchen_screen.dart';
@@ -17,8 +19,18 @@ class PawPointsApp extends StatelessWidget {
     return MaterialApp(
       title: 'PawPoints',
       debugShowCheckedModeBanner: false,
+      locale: const Locale('de', 'DE'),
+      supportedLocales: const [
+        Locale('de', 'DE'),
+        Locale('en', 'US'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
-        colorSchemeSeed: Colors.brown,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.brown),
         useMaterial3: true,
       ),
       home: const StartupScreen(),
@@ -37,12 +49,12 @@ class _StartupScreenState extends State<StartupScreen> {
   @override
   void initState() {
     super.initState();
-    _checkProfile();
+    _checkRole();
   }
 
-  Future<void> _checkProfile() async {
+  Future<void> _checkRole() async {
     final prefs = await SharedPreferences.getInstance();
-    final role = prefs.getString('user_role'); // "herrchen" oder "doggy"
+    final role = prefs.getString('user_role');
 
     if (role == 'herrchen') {
       Navigator.pushReplacement(
@@ -55,47 +67,56 @@ class _StartupScreenState extends State<StartupScreen> {
         MaterialPageRoute(builder: (_) => const DoggyScreen()),
       );
     }
-    // sonst: auf dieser Seite bleiben → Auswahl anzeigen
+  }
+
+  void _selectRole(String role) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_role', role);
+
+    if (role == 'herrchen') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const RegisterScreen()),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const DoggyJoinScreen()),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('PawPoints')),
+      appBar: AppBar(
+        title: const Text('PawPoints'),
+        centerTitle: true,
+      ),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('Wer bist du?', style: TextStyle(fontSize: 20)),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.person),
-              label: const Text('Ich bin das Herrchen'),
-              onPressed: () {
-                SharedPreferences.getInstance().then((prefs) {
-                  prefs.setString('user_role', 'herrchen');
-                });
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.pets),
-              label: const Text('Ich bin der Doggy'),
-              onPressed: () {
-                SharedPreferences.getInstance().then((prefs) {
-                  prefs.setString('user_role', 'doggy');
-                });
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const DoggyJoinScreen()),
-                );
-              },
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Wer bist du?',
+                style: TextStyle(fontSize: 20),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () => _selectRole('herrchen'),
+                icon: const Icon(Icons.person),
+                label: const Text('Herrchen'),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () => _selectRole('doggy'),
+                icon: const Icon(Icons.pets),
+                label: const Text('Doggy'),
+              ),
+            ],
+          ),
         ),
       ),
     );
