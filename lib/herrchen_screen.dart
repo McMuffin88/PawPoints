@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'doggy_screen.dart';
@@ -76,7 +77,10 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
       builder: (ctx) {
         final titleController = TextEditingController();
         final pointsController = TextEditingController();
+        final repeatController = TextEditingController();
         DateTime? selectedDate;
+        String repeatType = 'einmalig';
+        final repeatDaysController = TextEditingController();
 
         return StatefulBuilder(
           builder: (context, dialogSetState) {
@@ -101,7 +105,7 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
                         child: Text(
                           selectedDate == null
                               ? 'Kein Datum gewählt'
-                              : 'Fällig: ${selectedDate!.day}.${selectedDate!.month}.${selectedDate!.year}',
+                              : 'Fällig: ${DateFormat('dd.MM.yyyy').format(selectedDate!)}',
                         ),
                       ),
                       IconButton(
@@ -123,6 +127,27 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 12),
+                  DropdownButton<String>(
+                    value: repeatType,
+                    onChanged: (value) {
+                      dialogSetState(() {
+                        repeatType = value!;
+                      });
+                    },
+                    items: const [
+                      DropdownMenuItem(value: 'einmalig', child: Text('Einmalig')),
+                      DropdownMenuItem(value: 'weekly', child: Text('Wöchentlich')),
+                      DropdownMenuItem(value: 'monthly', child: Text('Monatlich')),
+                      DropdownMenuItem(value: 'every_x', child: Text('Alle X Tage')),
+                    ],
+                  ),
+                  if (repeatType == 'every_x')
+                    TextField(
+                      controller: repeatDaysController,
+                      decoration: const InputDecoration(labelText: 'Alle wie viele Tage?'),
+                      keyboardType: TextInputType.number,
+                    ),
                 ],
               ),
               actions: [
@@ -134,6 +159,15 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
                   onPressed: () {
                     final title = titleController.text.trim();
                     final points = int.tryParse(pointsController.text) ?? 0;
+                    String? repeat;
+                    if (repeatType == 'weekly') repeat = 'weekly';
+                    if (repeatType == 'monthly') repeat = 'monthly';
+                    if (repeatType == 'every_x') {
+                      final days = int.tryParse(repeatDaysController.text);
+                      if (days != null && days > 0) {
+                        repeat = 'every_$days';
+                      }
+                    }
 
                     if (title.isNotEmpty && selectedDate != null) {
                       setState(() {
@@ -141,6 +175,7 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
                           'title': title,
                           'points': points,
                           'due': selectedDate!.toIso8601String(),
+                          if (repeat != null) 'repeat': repeat
                         });
                       });
                       _saveTasks();
@@ -180,7 +215,7 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
                 context,
                 MaterialPageRoute(builder: (_) => const HerrchenProfileScreen()),
               );
-              _loadProfileImage(); // Reload image after profile edit
+              _loadProfileImage();
             },
           ),
         ],
@@ -199,7 +234,7 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
                       final task = _tasks[index];
                       final dueDate = DateTime.tryParse(task['due'] ?? '');
                       final dueFormatted = dueDate != null
-                          ? '${dueDate.day}.${dueDate.month}.${dueDate.year}'
+                          ? DateFormat('dd.MM.yyyy').format(dueDate)
                           : task['due'].toString();
 
                       return Card(

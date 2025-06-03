@@ -86,34 +86,37 @@ class _StartupScreenState extends State<StartupScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('PawPoints'),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'Wer bist du?',
-                style: TextStyle(fontSize: 20),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: () => _selectRole('herrchen'),
-                icon: const Icon(Icons.person),
-                label: const Text('Herrchen'),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: () => _selectRole('doggy'),
-                icon: const Icon(Icons.pets),
-                label: const Text('Doggy'),
+@override
+Widget build(BuildContext context) {
+  final screenHeight = MediaQuery.of(context).size.height;
+
+  return Scaffold(
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              'assets/logo.png',
+              height: screenHeight * 0.3, // 👉 30% der Bildschirmhöhe
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              'Wer bist du?',
+              style: TextStyle(fontSize: 20),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () => _selectRole('herrchen'),
+              icon: const Icon(Icons.person),
+              label: const Text('Herrchen'),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: () => _selectRole('doggy'),
+              icon: const Icon(Icons.pets),
+              label: const Text('Doggy'),
               ),
             ],
           ),
