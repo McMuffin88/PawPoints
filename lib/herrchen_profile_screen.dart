@@ -6,19 +6,18 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class DoggyProfileScreen extends StatefulWidget {
-  final String inviteCode;
-
-  const DoggyProfileScreen({super.key, required this.inviteCode});
+class HerrchenProfileScreen extends StatefulWidget {
+  const HerrchenProfileScreen({super.key});
 
   @override
-  State<DoggyProfileScreen> createState() => _DoggyProfileScreenState();
+  State<HerrchenProfileScreen> createState() => _HerrchenProfileScreenState();
 }
 
-class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
+class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
   final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
   File? _profileImage;
-  String? _webImagePath;
+  String? _webImagePath; // für Web
 
   @override
   void initState() {
@@ -28,9 +27,10 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
 
   Future<void> _loadProfile() async {
     final prefs = await SharedPreferences.getInstance();
-    _nameController.text = prefs.getString('doggy_displayname') ?? '';
+    _nameController.text = prefs.getString('herrchen_displayname') ?? '';
+    _emailController.text = prefs.getString('herrchen_email') ?? '';
 
-    final imagePath = prefs.getString('doggy_image');
+    final imagePath = prefs.getString('herrchen_image');
     if (imagePath != null) {
       if (kIsWeb) {
         setState(() {
@@ -52,7 +52,7 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
     final prefs = await SharedPreferences.getInstance();
 
     if (kIsWeb) {
-      await prefs.setString('doggy_image', pickedFile.path);
+      await prefs.setString('herrchen_image', pickedFile.path);
       setState(() {
         _webImagePath = pickedFile.path;
       });
@@ -60,7 +60,7 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
       final appDir = await getApplicationDocumentsDirectory();
       final fileName = path.basename(pickedFile.path);
       final savedImage = await File(pickedFile.path).copy('${appDir.path}/$fileName');
-      await prefs.setString('doggy_image', savedImage.path);
+      await prefs.setString('herrchen_image', savedImage.path);
       setState(() {
         _profileImage = savedImage;
       });
@@ -69,17 +69,12 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
 
   Future<void> _saveProfile() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('doggy_displayname', _nameController.text);
+    await prefs.setString('herrchen_displayname', _nameController.text);
+    await prefs.setString('herrchen_email', _emailController.text);
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Profil gespeichert')),
     );
-
-    // Weiterleitung zur Doggy-Hauptseite (optional)
-    // Navigator.pushReplacement(
-    //   context,
-    //   MaterialPageRoute(builder: (_) => const DoggyScreen()),
-    // );
   }
 
   Widget _buildProfileImage() {
@@ -104,7 +99,7 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Doggy-Profil')),
+      appBar: AppBar(title: const Text('Herrchen-Profil')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -117,6 +112,12 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
             TextField(
               controller: _nameController,
               decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(labelText: 'E-Mail'),
+              keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 24),
             ElevatedButton(

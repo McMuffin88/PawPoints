@@ -17,8 +17,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  void _submit() {
+  void _submit() async {
     if (_formKey.currentState!.validate()) {
+      // 🔒 Name und E-Mail speichern
+      final prefs = await SharedPreferences.getInstance();
+// KEIN displayname hier speichern – der kommt später
+await prefs.setString('herrchen_email', _emailController.text);
+
+
       Navigator.push(
         context,
         MaterialPageRoute(
