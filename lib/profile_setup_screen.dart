@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'invite_doggy_screen.dart';
+import 'herrchen_screen.dart';
+
 
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -13,32 +14,21 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _displayNameController = TextEditingController();
 
-  Future<void> _submit() async {
-    if (_formKey.currentState!.validate()) {
-      final prefs = await SharedPreferences.getInstance();
+Future<void> _submit() async {
+  if (_formKey.currentState!.validate()) {
+    final prefs = await SharedPreferences.getInstance();
 
-      final displayName = _displayNameController.text.trim();
-      await prefs.setString('herrchen_displayname', displayName);
+    final displayName = _displayNameController.text.trim();
+    await prefs.setString('herrchen_displayname', displayName);
 
-      // Einladungscode nur erzeugen, wenn er noch nicht existiert
-      String? code = prefs.getString('invite_code');
-      if (code == null || code.isEmpty) {
-        code = _generateInviteCode();
-        await prefs.setString('invite_code', code);
-      }
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const InviteDoggyScreen()),
-      );
-    }
+    // ✅ Nur eine Navigation – direkt zur HerrchenScreen
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const HerrchenScreen()),
+    );
   }
+}
 
-  String _generateInviteCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final now = DateTime.now().millisecondsSinceEpoch;
-    return List.generate(8, (i) => chars[(now + i) % chars.length]).join();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,5 +64,4 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       ),
     );
   }
-
 }
