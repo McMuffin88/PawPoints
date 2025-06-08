@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'doggy_profile_screen.dart';
+import 'doggy_drawer.dart';
 
 class DoggyScreen extends StatefulWidget {
   const DoggyScreen({super.key});
@@ -19,12 +19,14 @@ class _DoggyScreenState extends State<DoggyScreen> {
   int _points = 0;
   File? _profileImage;
   String? _webImagePath;
+  String _doggyName = 'Doggy';
 
   @override
   void initState() {
     super.initState();
     _loadTasks();
     _loadProfileImage();
+    _loadDoggyName();
   }
 
   Future<void> _loadTasks() async {
@@ -57,6 +59,17 @@ class _DoggyScreenState extends State<DoggyScreen> {
         setState(() => _webImagePath = imagePath);
       } else if (File(imagePath).existsSync()) {
         setState(() => _profileImage = File(imagePath));
+      }
+    }
+  }
+
+  Future<void> _loadDoggyName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final doggyList = prefs.getString('doggys');
+    if (doggyList != null) {
+      final list = List<Map<String, dynamic>>.from(jsonDecode(doggyList));
+      if (list.isNotEmpty) {
+        setState(() => _doggyName = list[0]['name'] ?? 'Doggy');
       }
     }
   }
@@ -121,7 +134,6 @@ class _DoggyScreenState extends State<DoggyScreen> {
         if (due == null) continue;
 
         if (repeat == null) {
-          // einmalige Aufgabe
           if (due.isAfter(start.subtract(const Duration(seconds: 1))) && due.isBefore(end.add(const Duration(days: 1)))) {
             weekMap[key]!.add(task);
           }
@@ -161,19 +173,16 @@ class _DoggyScreenState extends State<DoggyScreen> {
       appBar: AppBar(
         title: const Text('Doggy-Aufgaben'),
         actions: [
-          IconButton(
-            icon: _buildProfileIcon(),
-            tooltip: 'Profil',
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const DoggyProfileScreen(inviteCode: 'dummy')),
-              );
-              _loadProfileImage();
-            },
+          Builder(
+            builder: (context) => IconButton(
+              icon: _buildProfileIcon(),
+              tooltip: 'Menü',
+              onPressed: () => Scaffold.of(context).openEndDrawer(),
+            ),
           ),
         ],
       ),
+      endDrawer: buildDoggyDrawer(context, _doggyName),
       body: Column(
         children: [
           Container(

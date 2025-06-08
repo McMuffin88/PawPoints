@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'doggy_screen.dart';
 import 'herrchen_profile_screen.dart';
+import 'herrchen_drawer.dart';
 
 class HerrchenScreen extends StatefulWidget {
   const HerrchenScreen({super.key});
@@ -16,6 +17,7 @@ class HerrchenScreen extends StatefulWidget {
 }
 
 class _HerrchenScreenState extends State<HerrchenScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   List<Map<String, dynamic>> _tasks = [];
   File? _profileImage;
   String? _webImagePath;
@@ -204,19 +206,17 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
+      endDrawer: buildHerrchenDrawer(context, _loadProfileImage),
       appBar: AppBar(
         title: const Text('Herrchen Aufgabenübersicht'),
         actions: [
-          IconButton(
-            icon: _buildProfileIcon(),
-            tooltip: 'Profil',
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const HerrchenProfileScreen()),
-              );
-              _loadProfileImage();
-            },
+          GestureDetector(
+            onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12.0),
+              child: _buildProfileIcon(),
+            ),
           ),
         ],
       ),
