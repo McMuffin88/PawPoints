@@ -1,4 +1,3 @@
-// vollständiger HerrchenProfileScreen mit Menüpunkt „Konto“ statt Tabs
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -8,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'herrchen_drawer.dart';
 
 class HerrchenProfileScreen extends StatefulWidget {
   const HerrchenProfileScreen({super.key});
@@ -17,13 +17,14 @@ class HerrchenProfileScreen extends StatefulWidget {
 }
 
 class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   File? _profileImage;
   String? _webImagePath;
   String _inviteCode = '';
   List<Map<String, dynamic>> _doggys = [];
-  int _selectedView = 0; // 0: Profil, 1: Doggys, 2: Berechtigungen, 3: Premium
+  int _selectedView = 0;
 
   @override
   void initState() {
@@ -283,18 +284,22 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
     }
 
     return Scaffold(
+      key: _scaffoldKey,
+      endDrawer: buildHerrchenDrawer(context, () {}),
+
       appBar: AppBar(
         title: const Text('Herrchen-Profil'),
         actions: [
-          PopupMenuButton<int>(
-            icon: const Icon(Icons.menu),
-            onSelected: (index) => setState(() => _selectedView = index),
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 0, child: Text('Profil')),
-              const PopupMenuItem(value: 1, child: Text('Meine Doggys')),
-              const PopupMenuItem(value: 2, child: Text('Berechtigungen')),
-              const PopupMenuItem(value: 3, child: Text('Premium')),
-            ],
+          GestureDetector(
+            onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12.0),
+              child: CircleAvatar(
+                radius: 20,
+                backgroundImage: imageProvider,
+                child: imageProvider == null ? const Icon(Icons.person) : null,
+              ),
+            ),
           ),
         ],
       ),
