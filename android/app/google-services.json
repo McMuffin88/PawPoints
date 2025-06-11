@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "229712878962",
+    "project_id": "pawpoints-298c1",
+    "storage_bucket": "pawpoints-298c1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:229712878962:android:8d59384bd39cbe25d691eb",
+        "android_client_info": {
+          "package_name": "com.example.pawpoints"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "229712878962-2i24o62144plnqac8s42s3g5c99ssa2s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAmcIEdkUwsjtfIyY-ruWHFlhXY6-vzdnI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "229712878962-2i24o62144plnqac8s42s3g5c99ssa2s.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "229712878962-5vqr9q72hfk5ke0pgmq5h1g3f4nnaovf.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.pawpoints"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
