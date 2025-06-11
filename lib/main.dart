@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart'; // ✅ NEU
+import 'firebase_options.dart'; // ✅ NEU
 
-import 'register_screen.dart';
+import 'Start/register_screen.dart';
 import 'doggy_join_screen.dart';
 import 'herrchen_screen.dart';
 import 'doggy_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized(); // ✅ notwendig für async init
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform, // ✅ verwendet die erzeugte Datei
+  );
   runApp(const PawPointsApp());
 }
 

@@ -1,12 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'doggy_screen.dart';
-import 'herrchen_profile_screen.dart';
 import 'herrchen_drawer.dart';
 
 class HerrchenScreen extends StatefulWidget {
@@ -19,14 +18,13 @@ class HerrchenScreen extends StatefulWidget {
 class _HerrchenScreenState extends State<HerrchenScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   List<Map<String, dynamic>> _tasks = [];
-  File? _profileImage;
-  String? _webImagePath;
+  String? _profileImageUrl;
 
   @override
   void initState() {
     super.initState();
     _loadTasks();
-    _loadProfileImage();
+    _loadProfileImageFromFirestore();
   }
 
   Future<void> _loadTasks() async {
@@ -46,30 +44,38 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
     await prefs.setString('doggy_tasks', jsonString);
   }
 
-  Future<void> _loadProfileImage() async {
-    final prefs = await SharedPreferences.getInstance();
-    final imagePath = prefs.getString('herrchen_image');
+  Future<void> _loadProfileImageFromFirestore() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-    if (imagePath != null) {
-      if (kIsWeb) {
-        setState(() {
-          _webImagePath = imagePath;
-        });
-      } else if (File(imagePath).existsSync()) {
-        setState(() {
-          _profileImage = File(imagePath);
-        });
-      }
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    final data = doc.data();
+    if (data != null && data['profileImageUrl'] != null) {
+      setState(() {
+        _profileImageUrl = data['profileImageUrl'];
+      });
+      print('[DEBUG] Geladene Bild-URL: $_profileImageUrl');
     }
   }
 
   Widget _buildProfileIcon() {
-    if (kIsWeb && _webImagePath != null) {
-      return CircleAvatar(backgroundImage: NetworkImage(_webImagePath!));
-    } else if (_profileImage != null) {
-      return CircleAvatar(backgroundImage: FileImage(_profileImage!));
+    if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
+      return CircleAvatar(
+        radius: 20,
+        backgroundImage: NetworkImage(_profileImageUrl!),
+        onBackgroundImageError: (_, __) {
+          print('[WARN] Bild konnte nicht geladen werden.');
+        },
+      );
     } else {
-      return const CircleAvatar(child: Icon(Icons.account_circle));
+      return const CircleAvatar(
+        radius: 20,
+        child: Icon(Icons.account_circle),
+      );
     }
   }
 
@@ -79,10 +85,9 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
       builder: (ctx) {
         final titleController = TextEditingController();
         final pointsController = TextEditingController();
-        final repeatController = TextEditingController();
+        final repeatDaysController = TextEditingController();
         DateTime? selectedDate;
         String repeatType = 'einmalig';
-        final repeatDaysController = TextEditingController();
 
         return StatefulBuilder(
           builder: (context, dialogSetState) {
@@ -207,7 +212,7 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
-      endDrawer: buildHerrchenDrawer(context, _loadProfileImage),
+      endDrawer: buildHerrchenDrawer(context, _loadProfileImageFromFirestore),
       appBar: AppBar(
         title: const Text('Herrchen Aufgabenübersicht'),
         actions: [
