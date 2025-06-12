@@ -1,5 +1,3 @@
-// Erweiterter HerrchenShopScreen mit Übersicht, Doggy-Auswahl, Punkteanzeige und Formular getrennt
-
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -136,8 +134,83 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen> {
     _saveRewards();
   }
 
+  List<Widget> _buildRewardForm() {
+    return [
+      TextField(controller: _titleController, decoration: const InputDecoration(labelText: 'Titel')),
+      TextField(controller: _descController, decoration: const InputDecoration(labelText: 'Beschreibung')),
+      TextField(controller: _pointsController, decoration: const InputDecoration(labelText: 'Kosten (Punkte)'), keyboardType: TextInputType.number),
+      DropdownButton<String>(
+        value: _rewardDoggy,
+        onChanged: (val) => setState(() => _rewardDoggy = val ?? 'Alle'),
+        items: [
+          const DropdownMenuItem(value: 'Alle', child: Text('Alle')),
+          ..._doggys.map((d) => DropdownMenuItem(value: d['name'], child: Text(d['name']))),
+        ],
+      ),
+      Row(children: [const Text('Aktiv?'), Switch(value: _active, onChanged: (val) => setState(() => _active = val))]),
+      Row(
+        children: [
+          const Text('Steigend?'),
+          Switch(value: _escalating, onChanged: (val) => setState(() => _escalating = val)),
+          if (_escalating) ...[
+            Expanded(
+              child: TextField(
+                controller: _escalateEveryXController,
+                decoration: const InputDecoration(labelText: 'Jede X. Nutzung'),
+                keyboardType: TextInputType.number,
+              ),
+            ),
+            Expanded(
+              child: TextField(
+                controller: _increaseByController,
+                decoration: const InputDecoration(labelText: 'Erhöhung (Punkte)'),
+                keyboardType: TextInputType.number,
+              ),
+            ),
+          ]
+        ],
+      ),
+      Row(
+        children: [
+          ElevatedButton(onPressed: _addReward, child: const Text('Speichern')),
+          const SizedBox(width: 12),
+          TextButton(onPressed: () => setState(() => _showForm = false), child: const Text('Abbrechen')),
+        ],
+      ),
+      const SizedBox(height: 16),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_doggys.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Shop-Verwaltung')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'Du hast aktuell keine Doggys, denen du Belohnungen zuweisen kannst.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/mydoggys'); // ggf. anpassen
+                  },
+                  child: const Text('Zur "Meine Doggys"-Seite'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final filteredRewards = _rewards.where((r) => r['doggy'] == _selectedDoggy || r['doggy'] == 'Alle').toList();
 
     return Scaffold(
@@ -147,64 +220,25 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_doggys.isNotEmpty)
-              DropdownButton<String>(
-                value: _selectedDoggy,
-                onChanged: (value) => setState(() => _selectedDoggy = value),
-                items: _doggys.map<DropdownMenuItem<String>>((d) => DropdownMenuItem<String>(value: d['name'], child: Text('${d['name']} (${_points[d['name']] ?? 0} Punkte)'))).toList(),
-              ),
+            DropdownButton<String>(
+              value: _selectedDoggy,
+              onChanged: (value) => setState(() => _selectedDoggy = value),
+              items: _doggys
+                  .map<DropdownMenuItem<String>>(
+                    (d) => DropdownMenuItem<String>(
+                      value: d['name'],
+                      child: Text('${d['name']} (${_points[d['name']] ?? 0} Punkte)'),
+                    ),
+                  )
+                  .toList(),
+            ),
             const SizedBox(height: 12),
             if (!_showForm)
               ElevatedButton(
                 onPressed: () => setState(() => _showForm = true),
                 child: const Text('Neue Belohnung hinzufügen'),
               ),
-            if (_showForm)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(controller: _titleController, decoration: const InputDecoration(labelText: 'Titel')),
-                  TextField(controller: _descController, decoration: const InputDecoration(labelText: 'Beschreibung')),
-                  TextField(controller: _pointsController, decoration: const InputDecoration(labelText: 'Kosten (Punkte)'), keyboardType: TextInputType.number),
-                  DropdownButton<String>(
-                    value: _rewardDoggy,
-                    onChanged: (val) => setState(() => _rewardDoggy = val ?? 'Alle'),
-                    items: [const DropdownMenuItem(value: 'Alle', child: Text('Alle')),
-                      ..._doggys.map((d) => DropdownMenuItem(value: d['name'], child: Text(d['name'])))],
-                  ),
-                  Row(children: [const Text('Aktiv?'), Switch(value: _active, onChanged: (val) => setState(() => _active = val))]),
-                  Row(
-                    children: [
-                      const Text('Steigend?'),
-                      Switch(value: _escalating, onChanged: (val) => setState(() => _escalating = val)),
-                      if (_escalating) ...[
-                        Expanded(
-                          child: TextField(
-                            controller: _escalateEveryXController,
-                            decoration: const InputDecoration(labelText: 'Jede X. Nutzung'),
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                        Expanded(
-                          child: TextField(
-                            controller: _increaseByController,
-                            decoration: const InputDecoration(labelText: 'Erhöhung (Punkte)'),
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                      ]
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      ElevatedButton(onPressed: _addReward, child: const Text('Speichern')),
-                      const SizedBox(width: 12),
-                      TextButton(onPressed: () => setState(() => _showForm = false), child: const Text('Abbrechen')),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
+            if (_showForm) ..._buildRewardForm(),
             const Text('Belohnungen:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Expanded(
