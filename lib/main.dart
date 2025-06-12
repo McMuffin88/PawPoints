@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_core/firebase_core.dart'; // ✅ NEU
-import 'firebase_options.dart'; // ✅ NEU
+import 'package:firebase_core/firebase_core.dart';
 
+import 'firebase_options.dart';
 import 'Start/register_screen.dart';
-import 'doggy_join_screen.dart';
+import 'Start/doggy_join_screen.dart';
+import 'Start/doggy_register_screen.dart';
 import 'herrchen_screen.dart';
 import 'doggy_screen.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized(); // ✅ notwendig für async init
+  WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform, // ✅ verwendet die erzeugte Datei
+    options: DefaultFirebaseOptions.currentPlatform,
   );
   runApp(const PawPointsApp());
 }
@@ -92,37 +93,37 @@ class _StartupScreenState extends State<StartupScreen> {
     }
   }
 
-@override
-Widget build(BuildContext context) {
-  final screenHeight = MediaQuery.of(context).size.height;
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
 
-  return Scaffold(
-    body: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset(
-              'assets/logo.png',
-              height: screenHeight * 0.3, // 👉 30% der Bildschirmhöhe
-            ),
-            const SizedBox(height: 32),
-            const Text(
-              'Wer bist du?',
-              style: TextStyle(fontSize: 20),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: () => _selectRole('herrchen'),
-              icon: const Icon(Icons.person),
-              label: const Text('Herrchen'),
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: () => _selectRole('doggy'),
-              icon: const Icon(Icons.pets),
-              label: const Text('Doggy'),
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Image.asset(
+                'assets/logo.png',
+                height: screenHeight * 0.3,
+              ),
+              const SizedBox(height: 32),
+              const Text(
+                'Wer bist du?',
+                style: TextStyle(fontSize: 20),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () => _selectRole('herrchen'),
+                icon: const Icon(Icons.person),
+                label: const Text('Herrchen'),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () => _selectRole('doggy'),
+                icon: const Icon(Icons.pets),
+                label: const Text('Doggy'),
               ),
             ],
           ),

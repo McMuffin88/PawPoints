@@ -1,48 +1,41 @@
 name: pawpoints
-description: Eine Belohnungs-App für Doggy & Herrchen.
-publish_to: 'none'
+description: Eine App für Aufgaben und Belohnungssysteme für Doggys 🐶 und Herrchen 🧍
+
+publish_to: 'none' # Dieses Projekt soll nicht im pub.dev veröffentlicht werden
 
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.2.0 <4.0.0"
+  sdk: ">=3.1.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
-
-  # Lokalisierung
-  flutter_localizations:
-    sdk: flutter
+  crypto: ^3.0.3
 
   # Firebase
-  firebase_core: ^2.32.0
-  firebase_auth: ^4.20.0
-  cloud_firestore: ^4.15.5
-  firebase_storage: ^11.6.6
+  firebase_core: ^2.30.0
+  firebase_auth: ^4.17.0
+  cloud_firestore: ^4.17.0
+  firebase_storage: ^11.7.0
 
-  # Lokale Speicherung
+  # Sonstiges
   shared_preferences: ^2.2.2
+  image_picker: ^1.0.7
+  intl: 0.20.2
+  qr_flutter: ^4.0.0
 
-  # Medienauswahl
-  image_picker: ^1.0.4
-
-  # Dateipfade
-  path_provider: ^2.1.1
-  path: ^1.8.3
-
-  # Datum/Zeit Formatierung
-  intl: ^0.20.2
-
-  # Icons
-  cupertino_icons: ^1.0.6
+  # UI / Material
+  flutter_localizations:
+    sdk: flutter
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.1
+  flutter_lints: ^3.0.0
 
 flutter:
   uses-material-design: true
+
   assets:
     - assets/logo.png

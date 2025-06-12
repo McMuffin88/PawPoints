@@ -1,49 +1,44 @@
-import 'dart:convert';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'herrchen_profile_screen.dart';
-import 'meine_doggys_screen.dart';
-import 'doggy_berechtigungen_screen.dart';
-import 'herrchen_shop_screen.dart';
+import 'Settings/herrchen_profile_screen.dart';
+import 'Settings/mydoggys_screen.dart';
+import 'Settings/doggy_berechtigungen_screen.dart';
+import 'Settings/herrchen_shop_screen.dart';
+import 'Settings/premium_screen.dart';
 
-Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImage) {
-  Future<ImageProvider?> _getProfileImage() async {
-    final prefs = await SharedPreferences.getInstance();
-    final imagePath = prefs.getString('herrchen_image');
-    if (imagePath != null) {
-      if (kIsWeb) {
-        return NetworkImage(imagePath);
-      } else {
-        final file = File(imagePath);
-        if (await file.exists()) {
-          return FileImage(file);
-        }
-      }
-    }
-    return null;
+Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImage, List<Map<String, dynamic>> doggys) {
+  Future<Map<String, dynamic>?> _loadUserData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+
+    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    return doc.data();
   }
 
   return Drawer(
     child: Column(
       children: [
-        FutureBuilder<ImageProvider?>(
-          future: _getProfileImage(),
+        FutureBuilder<Map<String, dynamic>?>(
+          future: _loadUserData(),
           builder: (context, snapshot) {
-            final image = snapshot.connectionState == ConnectionState.done && snapshot.hasData
-                ? snapshot.data
-                : null;
+            final data = snapshot.data;
+            final name = data?['name'] ?? 'Herrchen';
+            final imageUrl = data?['profileImageUrl'];
+
             return UserAccountsDrawerHeader(
               decoration: const BoxDecoration(color: Colors.brown),
-              accountName: const Text("Mein Konto"),
-              accountEmail: const Text(""),
+              accountName: Text(name),
+              accountEmail: Text(FirebaseAuth.instance.currentUser?.email ?? ''),
               currentAccountPicture: CircleAvatar(
-                radius: 40,
                 backgroundColor: Colors.white,
-                backgroundImage: image,
-                child: image == null ? const Icon(Icons.person, size: 40, color: Colors.brown) : null,
+                backgroundImage: (imageUrl != null && imageUrl.toString().startsWith('http'))
+                    ? NetworkImage(imageUrl)
+                    : null,
+                child: imageUrl == null
+                    ? const Icon(Icons.person, size: 40, color: Colors.brown)
+                    : null,
               ),
             );
           },
@@ -64,37 +59,53 @@ Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImag
                         context,
                         MaterialPageRoute(builder: (_) => const HerrchenProfileScreen()),
                       );
-                      refreshProfileImage(); // <- aktualisiert Drawer-Bild
+                      refreshProfileImage();
                     },
                   ),
                   ListTile(
                     leading: const Icon(Icons.group),
                     title: const Text('Meine Doggys'),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const MeineDoggysScreen()),
-                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => MyDoggysScreen(doggys: doggys)),
+                      );
+                    },
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.shield),
-                    title: const Text('Berechtigungen'),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const DoggyBerechtigungenScreen()),
-                    ),
-                  ),
+ListTile(
+  leading: const Icon(Icons.shield),
+  title: const Text('Berechtigungen'),
+  onTap: () {
+    Navigator.pop(context); // Drawer schließen
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const DoggyBerechtigungenScreen()),
+    );
+  },
+),
+
                   ListTile(
                     leading: const Icon(Icons.store),
                     title: const Text('Shop'),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const HerrchenShopScreen()),
-                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const HerrchenShopScreen()),
+                      );
+                    },
                   ),
                   ListTile(
                     leading: const Icon(Icons.workspace_premium),
                     title: const Text('Premium'),
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const PremiumScreen()),
+                      );
+                    },
                   ),
                 ],
               ),

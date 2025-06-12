@@ -4,9 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'doggy_screen.dart';
-import 'herrchen_drawer.dart';
+import 'package:pawpoints/Herrchen_drawer.dart';
 
 class HerrchenScreen extends StatefulWidget {
   const HerrchenScreen({super.key});
@@ -17,14 +15,18 @@ class HerrchenScreen extends StatefulWidget {
 
 class _HerrchenScreenState extends State<HerrchenScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   List<Map<String, dynamic>> _tasks = [];
+  List<Map<String, dynamic>> _doggys = [];
   String? _profileImageUrl;
+  String _inviteCode = '';
 
   @override
   void initState() {
     super.initState();
     _loadTasks();
     _loadProfileImageFromFirestore();
+    _loadInviteCodeAndDoggys();
   }
 
   Future<void> _loadTasks() async {
@@ -34,6 +36,22 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
       final List<dynamic> decoded = jsonDecode(tasksJson);
       setState(() {
         _tasks = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      });
+    }
+  }
+
+  Future<void> _loadInviteCodeAndDoggys() async {
+    final prefs = await SharedPreferences.getInstance();
+    final doggyList = prefs.getString('doggys');
+    final inviteCode = prefs.getString('invite_code');
+    if (doggyList != null) {
+      setState(() {
+        _doggys = List<Map<String, dynamic>>.from(jsonDecode(doggyList));
+      });
+    }
+    if (inviteCode != null) {
+      setState(() {
+        _inviteCode = inviteCode;
       });
     }
   }
@@ -48,17 +66,12 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
+    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
     final data = doc.data();
     if (data != null && data['profileImageUrl'] != null) {
       setState(() {
         _profileImageUrl = data['profileImageUrl'];
       });
-      print('[DEBUG] Geladene Bild-URL: $_profileImageUrl');
     }
   }
 
@@ -68,7 +81,7 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
         radius: 20,
         backgroundImage: NetworkImage(_profileImageUrl!),
         onBackgroundImageError: (_, __) {
-          print('[WARN] Bild konnte nicht geladen werden.');
+          debugPrint('[WARN] Bild konnte nicht geladen werden.');
         },
       );
     } else {
@@ -126,9 +139,7 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
                             locale: const Locale('de', 'DE'),
                           );
                           if (picked != null) {
-                            dialogSetState(() {
-                              selectedDate = picked;
-                            });
+                            dialogSetState(() => selectedDate = picked);
                           }
                         },
                       ),
@@ -137,11 +148,7 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
                   const SizedBox(height: 12),
                   DropdownButton<String>(
                     value: repeatType,
-                    onChanged: (value) {
-                      dialogSetState(() {
-                        repeatType = value!;
-                      });
-                    },
+                    onChanged: (value) => dialogSetState(() => repeatType = value!),
                     items: const [
                       DropdownMenuItem(value: 'einmalig', child: Text('Einmalig')),
                       DropdownMenuItem(value: 'weekly', child: Text('Wöchentlich')),
@@ -171,23 +178,17 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
                     if (repeatType == 'monthly') repeat = 'monthly';
                     if (repeatType == 'every_x') {
                       final days = int.tryParse(repeatDaysController.text);
-                      if (days != null && days > 0) {
-                        repeat = 'every_$days';
-                      }
+                      if (days != null) repeat = 'every_$days';
                     }
-
-                    if (title.isNotEmpty && selectedDate != null) {
-                      setState(() {
-                        _tasks.add({
-                          'title': title,
-                          'points': points,
-                          'due': selectedDate!.toIso8601String(),
-                          if (repeat != null) 'repeat': repeat
-                        });
-                      });
-                      _saveTasks();
-                      Navigator.pop(ctx);
-                    }
+                    final task = {
+                      'title': title,
+                      'points': points,
+                      'due': selectedDate?.toIso8601String(),
+                      'repeat': repeat,
+                    };
+                    setState(() => _tasks.add(task));
+                    _saveTasks();
+                    Navigator.pop(ctx);
                   },
                   child: const Text('Hinzufügen'),
                 ),
@@ -199,22 +200,13 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
     );
   }
 
-  void _goToDoggyScreen() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_role', 'doggy');
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const DoggyScreen()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
-      endDrawer: buildHerrchenDrawer(context, _loadProfileImageFromFirestore),
+      endDrawer: buildHerrchenDrawer(context, _loadProfileImageFromFirestore, _doggys),
       appBar: AppBar(
-        title: const Text('Herrchen Aufgabenübersicht'),
+        title: const Text('Meine Aufgaben'),
         actions: [
           GestureDetector(
             onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
@@ -225,56 +217,19 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          const SizedBox(height: 12),
-          const Text('Doggy bekommt diese Aufgaben:', style: TextStyle(fontSize: 18)),
-          const SizedBox(height: 8),
-          Expanded(
-            child: _tasks.isEmpty
-                ? const Center(child: Text('Noch keine Aufgaben hinzugefügt.'))
-                : ListView.builder(
-                    itemCount: _tasks.length,
-                    itemBuilder: (_, index) {
-                      final task = _tasks[index];
-                      final dueDate = DateTime.tryParse(task['due'] ?? '');
-                      final dueFormatted = dueDate != null
-                          ? DateFormat('dd.MM.yyyy').format(dueDate)
-                          : task['due'].toString();
-
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        child: ListTile(
-                          leading: const Icon(Icons.task),
-                          title: Text(task['title']),
-                          subtitle: Text('Punkte: ${task['points']} – Fällig: $dueFormatted'),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete),
-                            onPressed: () {
-                              setState(() {
-                                _tasks.removeAt(index);
-                              });
-                              _saveTasks();
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _goToDoggyScreen,
-            icon: const Icon(Icons.pets),
-            label: const Text('Zum Doggy-Bereich'),
-          ),
-          const SizedBox(height: 16),
-        ],
+      body: ListView.builder(
+        itemCount: _tasks.length,
+        itemBuilder: (_, index) {
+          final task = _tasks[index];
+          return ListTile(
+            title: Text(task['title'] ?? 'Aufgabe'),
+            subtitle: Text('Punkte: ${task['points'] ?? 0}'),
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addTask,
         child: const Icon(Icons.add),
-        tooltip: 'Aufgabe hinzufügen',
       ),
     );
   }
