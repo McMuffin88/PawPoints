@@ -1,10 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'doggy_profile_screen.dart';
+import 'Settings/doggy_profile_screen.dart';
 import 'doggy_drawer.dart';
 
 class DoggyScreen extends StatefulWidget {
@@ -17,7 +18,6 @@ class DoggyScreen extends StatefulWidget {
 class _DoggyScreenState extends State<DoggyScreen> {
   List<Map<String, dynamic>> _tasks = [];
   int _points = 0;
-  File? _profileImage;
   String? _webImagePath;
   String _doggyName = 'Doggy';
 
@@ -25,8 +25,7 @@ class _DoggyScreenState extends State<DoggyScreen> {
   void initState() {
     super.initState();
     _loadTasks();
-    _loadProfileImage();
-    _loadDoggyName();
+    _loadDoggyFirebaseData();
   }
 
   Future<void> _loadTasks() async {
@@ -50,35 +49,26 @@ class _DoggyScreenState extends State<DoggyScreen> {
     await prefs.setInt('doggy_points', _points);
   }
 
-  Future<void> _loadProfileImage() async {
-    final prefs = await SharedPreferences.getInstance();
-    final imagePath = prefs.getString('doggy_image');
+  Future<void> _loadDoggyFirebaseData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-    if (imagePath != null) {
-      if (kIsWeb) {
-        setState(() => _webImagePath = imagePath);
-      } else if (File(imagePath).existsSync()) {
-        setState(() => _profileImage = File(imagePath));
-      }
-    }
-  }
+    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    final data = doc.data();
+    if (data == null) return;
 
-  Future<void> _loadDoggyName() async {
-    final prefs = await SharedPreferences.getInstance();
-    final doggyList = prefs.getString('doggys');
-    if (doggyList != null) {
-      final list = List<Map<String, dynamic>>.from(jsonDecode(doggyList));
-      if (list.isNotEmpty) {
-        setState(() => _doggyName = list[0]['name'] ?? 'Doggy');
+    setState(() {
+      _doggyName = data['name'] ?? 'Doggy';
+      final imageUrl = data['profileImageUrl'];
+      if (imageUrl != null) {
+        _webImagePath = imageUrl;
       }
-    }
+    });
   }
 
   Widget _buildProfileIcon() {
-    if (kIsWeb && _webImagePath != null) {
+    if (_webImagePath != null && _webImagePath!.startsWith('http')) {
       return CircleAvatar(backgroundImage: NetworkImage(_webImagePath!));
-    } else if (_profileImage != null) {
-      return CircleAvatar(backgroundImage: FileImage(_profileImage!));
     } else {
       return const CircleAvatar(child: Icon(Icons.account_circle));
     }
@@ -182,7 +172,7 @@ class _DoggyScreenState extends State<DoggyScreen> {
           ),
         ],
       ),
-      endDrawer: buildDoggyDrawer(context, _doggyName),
+      endDrawer: buildDoggyDrawer(context),
       body: Column(
         children: [
           Container(
