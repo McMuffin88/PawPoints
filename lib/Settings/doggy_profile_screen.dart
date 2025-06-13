@@ -163,7 +163,7 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
             TextField(controller: _cityController, decoration: const InputDecoration(labelText: 'Stadt'), enabled: _isEditing),
             const SizedBox(height: 12),
 DropdownButtonFormField<String>(
-  value: _gender.isNotEmpty ? _gender : null,
+  value: ['männlich', 'weiblich', 'divers'].contains(_gender) ? _gender : null,
   items: const [
     DropdownMenuItem(value: 'männlich', child: Text('Männlich')),
     DropdownMenuItem(value: 'weiblich', child: Text('Weiblich')),

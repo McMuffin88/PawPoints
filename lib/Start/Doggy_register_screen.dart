@@ -1,8 +1,7 @@
-// DoggyRegisterScreen.dart – Registrierung mit E-Mail und Passwort
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pawpoints/Start/verify_email_screen.dart';
-
 
 class DoggyRegisterScreen extends StatefulWidget {
   const DoggyRegisterScreen({super.key});
@@ -35,23 +34,32 @@ class _DoggyRegisterScreenState extends State<DoggyRegisterScreen> {
         password: _passwordController.text,
       );
 
-      await userCredential.user!.sendEmailVerification();
+      final user = userCredential.user!;
+      await user.sendEmailVerification();
+
+      // Firestore-Eintrag vorbereiten
+      final uid = user.uid;
+      final name = _emailController.text.trim().split('@').first;
+
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'name': name,
+        'role': 'doggy',
+        'linkedTo': null,
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Bitte E-Mail-Adresse bestätigen.')),
       );
 
-Navigator.pushReplacement(
-  context,
-  MaterialPageRoute(
-    builder: (_) => VerifyEmailScreen(
-      username: _emailController.text.trim(), // oder z.B. _emailController.text.split('@').first
-      email: _emailController.text.trim(),
-    ),
-  ),
-);
-
-
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => VerifyEmailScreen(
+            username: name,
+            email: _emailController.text.trim(),
+          ),
+        ),
+      );
     } on FirebaseAuthException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message ?? 'Registrierung fehlgeschlagen')),

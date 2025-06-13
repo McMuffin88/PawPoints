@@ -1,12 +1,13 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
 import 'Settings/herrchen_profile_screen.dart';
 import 'Settings/mydoggys_screen.dart';
 import 'Settings/doggy_berechtigungen_screen.dart';
 import 'Settings/herrchen_shop_screen.dart';
 import 'Settings/premium_screen.dart';
+import 'role_selection_screen.dart';
 
 Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImage, List<Map<String, dynamic>> doggys) {
   Future<Map<String, dynamic>?> _loadUserData() async {
@@ -73,18 +74,17 @@ Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImag
                       );
                     },
                   ),
-ListTile(
-  leading: const Icon(Icons.shield),
-  title: const Text('Berechtigungen'),
-  onTap: () {
-    Navigator.pop(context); // Drawer schließen
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const DoggyBerechtigungenScreen()),
-    );
-  },
-),
-
+                  ListTile(
+                    leading: const Icon(Icons.shield),
+                    title: const Text('Berechtigungen'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const DoggyBerechtigungenScreen()),
+                      );
+                    },
+                  ),
                   ListTile(
                     leading: const Icon(Icons.store),
                     title: const Text('Shop'),
@@ -113,83 +113,75 @@ ListTile(
                 leading: const Icon(Icons.check_circle_outline),
                 title: const Text('Tätigkeiten'),
                 children: const [
-                  ListTile(
-                    leading: Icon(Icons.notifications),
-                    title: Text('Benachrichtigungen'),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.calendar_month),
-                    title: Text('Wöchentliche Zusammenfassung'),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.card_giftcard),
-                    title: Text('Verlauf Belohnungen'),
-                  ),
+                  ListTile(leading: Icon(Icons.notifications), title: Text('Benachrichtigungen')),
+                  ListTile(leading: Icon(Icons.calendar_month), title: Text('Wöchentliche Zusammenfassung')),
+                  ListTile(leading: Icon(Icons.card_giftcard), title: Text('Verlauf Belohnungen')),
                 ],
               ),
               ExpansionTile(
                 leading: const Icon(Icons.settings),
                 title: const Text('Einstellungen'),
                 children: const [
-                  ListTile(
-                    leading: Icon(Icons.notifications_active),
-                    title: Text('Benachrichtigungen'),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.lock),
-                    title: Text('Zugangs-PIN'),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.palette),
-                    title: Text('Erscheinungsbild'),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.visibility_off),
-                    title: Text('Diskreter Modus'),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.beach_access),
-                    title: Text('Urlaubsmodus'),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.language),
-                    title: Text('Sprache'),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.format_size),
-                    title: Text('Schriftgröße'),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.download),
-                    title: Text('Vorlage exportieren'),
-                  ),
+                  ListTile(leading: Icon(Icons.notifications_active), title: Text('Benachrichtigungen')),
+                  ListTile(leading: Icon(Icons.lock), title: Text('Zugangs-PIN')),
+                  ListTile(leading: Icon(Icons.palette), title: Text('Erscheinungsbild')),
+                  ListTile(leading: Icon(Icons.visibility_off), title: Text('Diskreter Modus')),
+                  ListTile(leading: Icon(Icons.beach_access), title: Text('Urlaubsmodus')),
+                  ListTile(leading: Icon(Icons.language), title: Text('Sprache')),
+                  ListTile(leading: Icon(Icons.format_size), title: Text('Schriftgröße')),
+                  ListTile(leading: Icon(Icons.download), title: Text('Vorlage exportieren')),
                 ],
               ),
               ExpansionTile(
                 leading: const Icon(Icons.help_outline),
                 title: const Text('Support'),
                 children: const [
-                  ListTile(
-                    leading: Icon(Icons.question_answer),
-                    title: Text('FAQ'),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.feedback),
-                    title: Text('Support und Feedback'),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.article),
-                    title: Text('Nutzungsbedingungen'),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.privacy_tip),
-                    title: Text('Datenschutz'),
-                  ),
+                  ListTile(leading: Icon(Icons.question_answer), title: Text('FAQ')),
+                  ListTile(leading: Icon(Icons.feedback), title: Text('Support und Feedback')),
+                  ListTile(leading: Icon(Icons.article), title: Text('Nutzungsbedingungen')),
+                  ListTile(leading: Icon(Icons.privacy_tip), title: Text('Datenschutz')),
                 ],
               ),
             ],
           ),
         ),
+
+        const Divider(),
+
+        ListTile(
+          leading: const Icon(Icons.logout, color: Colors.red),
+          title: const Text('Logout'),
+          onTap: () async {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Abmelden?'),
+                content: const Text('Möchtest du dich wirklich abmelden?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Abbrechen'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Logout'),
+                  ),
+                ],
+              ),
+            );
+
+            if (confirm == true) {
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+                      (route) => false,
+                );
+              }
+            }
+          },
+        ),
+
         const Padding(
           padding: EdgeInsets.all(8.0),
           child: Text('Version v.0.0.1 Alpha', style: TextStyle(color: Colors.grey)),

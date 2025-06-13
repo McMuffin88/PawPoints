@@ -3,13 +3,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'Settings/doggy_profile_screen.dart';
 import 'doggy_shop_screen.dart';
+import 'package:pawpoints/Settings/find_herrchen_screen.dart';
+import 'role_selection_screen.dart';
 
 Widget buildDoggyDrawer(BuildContext context) {
   final currentUser = FirebaseAuth.instance.currentUser;
 
+  if (currentUser == null) {
+    return const Drawer(
+      child: Center(child: Text('Nicht eingeloggt')),
+    );
+  }
+
   return Drawer(
     child: FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).get(),
+      future: FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -35,8 +43,10 @@ Widget buildDoggyDrawer(BuildContext context) {
               ),
             ),
             const SizedBox(height: 8),
-            Text(doggyName,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              doggyName,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 16),
             Expanded(
               child: ListView(
@@ -55,6 +65,19 @@ Widget buildDoggyDrawer(BuildContext context) {
                             context,
                             MaterialPageRoute(
                               builder: (_) => const DoggyProfileScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.search),
+                        title: const Text('Herrchen finden'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const FindHerrchenScreen(),
                             ),
                           );
                         },
@@ -84,69 +107,72 @@ Widget buildDoggyDrawer(BuildContext context) {
                     leading: const Icon(Icons.settings),
                     title: const Text('Einstellungen'),
                     children: const [
-                      ListTile(
-                        leading: Icon(Icons.notifications),
-                        title: Text('Benachrichtigungen'),
-                      ),
-                      ListTile(
-                        leading: Icon(Icons.lock),
-                        title: Text('Zugangs-PIN'),
-                      ),
-                      ListTile(
-                        leading: Icon(Icons.color_lens),
-                        title: Text('Erscheinungsbild'),
-                      ),
-                      ListTile(
-                        leading: Icon(Icons.visibility_off),
-                        title: Text('Diskreter Modus'),
-                      ),
-                      ListTile(
-                        leading: Icon(Icons.flight),
-                        title: Text('Urlaubsmodus'),
-                      ),
-                      ListTile(
-                        leading: Icon(Icons.language),
-                        title: Text('Sprache'),
-                      ),
-                      ListTile(
-                        leading: Icon(Icons.format_size),
-                        title: Text('Schriftgröße'),
-                      ),
-                      ListTile(
-                        leading: Icon(Icons.upload_file),
-                        title: Text('Vorlage exportieren'),
-                      ),
+                      ListTile(leading: Icon(Icons.notifications), title: Text('Benachrichtigungen')),
+                      ListTile(leading: Icon(Icons.lock), title: Text('Zugangs-PIN')),
+                      ListTile(leading: Icon(Icons.color_lens), title: Text('Erscheinungsbild')),
+                      ListTile(leading: Icon(Icons.visibility_off), title: Text('Diskreter Modus')),
+                      ListTile(leading: Icon(Icons.flight), title: Text('Urlaubsmodus')),
+                      ListTile(leading: Icon(Icons.language), title: Text('Sprache')),
+                      ListTile(leading: Icon(Icons.format_size), title: Text('Schriftgröße')),
+                      ListTile(leading: Icon(Icons.upload_file), title: Text('Vorlage exportieren')),
                     ],
                   ),
                   ExpansionTile(
                     leading: const Icon(Icons.support),
                     title: const Text('Support'),
                     children: const [
-                      ListTile(
-                        leading: Icon(Icons.help),
-                        title: Text('FAQ'),
-                      ),
-                      ListTile(
-                        leading: Icon(Icons.feedback),
-                        title: Text('Feedback'),
-                      ),
-                      ListTile(
-                        leading: Icon(Icons.privacy_tip),
-                        title: Text('Datenschutz'),
-                      ),
-                      ListTile(
-                        leading: Icon(Icons.article),
-                        title: Text('Nutzungsbedingungen'),
-                      ),
+                      ListTile(leading: Icon(Icons.help), title: Text('FAQ')),
+                      ListTile(leading: Icon(Icons.feedback), title: Text('Feedback')),
+                      ListTile(leading: Icon(Icons.privacy_tip), title: Text('Datenschutz')),
+                      ListTile(leading: Icon(Icons.article), title: Text('Nutzungsbedingungen')),
                     ],
                   ),
                 ],
               ),
             ),
+
+            const Divider(),
+
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Logout'),
+              onTap: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Abmelden?'),
+                    content: const Text('Möchtest du dich wirklich abmelden?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Abbrechen'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Logout'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true) {
+                  await FirebaseAuth.instance.signOut();
+                  if (context.mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+                          (route) => false,
+                    );
+                  }
+                }
+              },
+            ),
+
             const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Text('Version 0.0.1 Alpha',
-                  style: TextStyle(color: Colors.grey)),
+              padding: EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Version 0.0.1 Alpha',
+                style: TextStyle(color: Colors.grey),
+              ),
             ),
           ],
         );

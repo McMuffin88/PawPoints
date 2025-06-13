@@ -75,7 +75,14 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
         .ref()
         .child('profile_images/${user.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
 
-    await ref.putFile(File(pickedFile.path));
+    if (kIsWeb) {
+      final bytes = await pickedFile.readAsBytes();
+      await ref.putData(bytes);
+    } else {
+      final file = File(pickedFile.path);
+      await ref.putFile(file);
+    }
+
     final url = await ref.getDownloadURL();
 
     setState(() => _profileImageUrl = url);

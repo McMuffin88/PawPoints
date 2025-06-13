@@ -1,51 +1,19 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'mydoggys_screen.dart';
 
-class DoggyBerechtigungenScreen extends StatefulWidget {
+class DoggyBerechtigungenScreen extends StatelessWidget {
   const DoggyBerechtigungenScreen({super.key});
 
-  @override
-  State<DoggyBerechtigungenScreen> createState() => _DoggyBerechtigungenScreenState();
-}
-
-class _DoggyBerechtigungenScreenState extends State<DoggyBerechtigungenScreen> {
-  List<Map<String, dynamic>> _doggys = [];
-  String _inviteCode = '';
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadDoggyAssignments();
-  }
-
-  Future<void> _loadDoggyAssignments() async {
+  Future<String> _loadInviteCode() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
+    if (user == null) return '';
     final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-    final data = userDoc.data();
-
-    if (data != null && data.containsKey('inviteCode')) {
-      _inviteCode = data['inviteCode'];
-    }
-
-    final querySnapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('assignedHerrchen')
-        .get();
-
-    _doggys = querySnapshot.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
-
-    setState(() {
-      _isLoading = false;
-    });
+    return userDoc.data()?['inviteCode'] ?? '';
   }
 
-  Widget _buildNoDoggysView() {
+  Widget _buildNoDoggysView(BuildContext context, String inviteCode) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -61,7 +29,7 @@ class _DoggyBerechtigungenScreenState extends State<DoggyBerechtigungenScreen> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'Bitte verwende deinen Einladungs- oder QR Code, um die Verbindung herzustellen.',
+              'Bitte verwende deinen Einladungs- oder QR-Code, um die Verbindung herzustellen.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -70,8 +38,7 @@ class _DoggyBerechtigungenScreenState extends State<DoggyBerechtigungenScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => MyDoggysScreen(inviteCode: _inviteCode, doggys: [])
-
+                    builder: (_) => MyDoggysScreen(inviteCode: inviteCode),
                   ),
                 );
               },
@@ -84,31 +51,152 @@ class _DoggyBerechtigungenScreenState extends State<DoggyBerechtigungenScreen> {
     );
   }
 
-  Widget _buildDoggyList() {
+  Widget _buildDoggyList(QuerySnapshot snapshot, String herrchenId) {
+    final doggys = snapshot.docs;
+    if (doggys.isEmpty) return const SizedBox.shrink();
+
     return ListView.builder(
-      itemCount: _doggys.length,
+      itemCount: doggys.length,
       itemBuilder: (context, index) {
-        final doggy = _doggys[index];
-        return ListTile(
-          leading: const Icon(Icons.person),
-          title: Text(doggy['name'] ?? 'Unbenannt'),
-          subtitle: Text('Status: ${doggy['status'] ?? 'aktiv'}'),
+        final doc = doggys[index];
+        final doggyId = doc.id;
+        final data = doc.data() as Map<String, dynamic>;
+
+        return FutureBuilder<DocumentSnapshot>(
+          future: FirebaseFirestore.instance
+              .collection('users')
+              .doc(doggyId)
+              .collection('assignedHerrchen')
+              .doc(herrchenId)
+              .get(),
+          builder: (context, permissionSnapshot) {
+            if (!permissionSnapshot.hasData) return const SizedBox.shrink();
+            final permissions = permissionSnapshot.data!.data() as Map<String, dynamic>? ?? {};
+
+            return Card(
+              margin: const EdgeInsets.all(8),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage: data['profileImageUrl'] != null
+                            ? NetworkImage(data['profileImageUrl'])
+                            : null,
+                        child: data['profileImageUrl'] == null ? const Icon(Icons.pets) : null,
+                      ),
+                      title: Text(data['name'] ?? 'Unbenannt'),
+                      subtitle: Text('Status: ${permissions['status'] ?? 'aktiv'}'),
+                    ),
+                    const Divider(),
+                    _buildSwitch(
+                      context,
+                      doggyId,
+                      herrchenId,
+                      'tasksAddAllowed',
+                      permissions['tasksAddAllowed'] ?? false,
+                      'Darf Aufgaben, Belohnungen & Bestrafungen hinzufügen',
+                    ),
+                    _buildSwitch(
+                      context,
+                      doggyId,
+                      herrchenId,
+                      'tasksEditAllowed',
+                      permissions['tasksEditAllowed'] ?? false,
+                      'Darf Aufgaben, Belohnungen & Bestrafungen bearbeiten/löschen',
+                    ),
+                    _buildSwitch(
+                      context,
+                      doggyId,
+                      herrchenId,
+                      'rulesEditAllowed',
+                      permissions['rulesEditAllowed'] ?? false,
+                      'Darf Regeln ändern',
+                    ),
+                    _buildSwitch(
+                      context,
+                      doggyId,
+                      herrchenId,
+                      'notesEditAllowed',
+                      permissions['notesEditAllowed'] ?? false,
+                      'Darf Ideen, Notizen oder Wünsche ändern',
+                    ),
+                    _buildSwitch(
+                      context,
+                      doggyId,
+                      herrchenId,
+                      'historyEditAllowed',
+                      permissions['historyEditAllowed'] ?? false,
+                      'Darf Aufgabenverlauf ändern',
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
+      },
+    );
+  }
+
+  Widget _buildSwitch(BuildContext context, String doggyId, String herrchenId,
+      String fieldName, bool currentValue, String label) {
+    return SwitchListTile(
+      title: Text(label),
+      value: currentValue,
+      onChanged: (val) {
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(doggyId)
+            .collection('assignedHerrchen')
+            .doc(herrchenId)
+            .update({fieldName: val});
       },
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return const Scaffold(
+        body: Center(child: Text('Nicht eingeloggt')),
+      );
+    }
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Berechtigungen'),
+      appBar: AppBar(title: const Text('Berechtigungen')),
+      body: FutureBuilder<String>(
+        future: _loadInviteCode(),
+        builder: (context, inviteSnapshot) {
+          if (!inviteSnapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final inviteCode = inviteSnapshot.data!;
+
+          return StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .collection('doggys')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (snapshot.data!.docs.isEmpty) {
+                return _buildNoDoggysView(context, inviteCode);
+              }
+
+              return _buildDoggyList(snapshot.data!, user.uid);
+            },
+          );
+        },
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _doggys.isEmpty
-              ? _buildNoDoggysView()
-              : _buildDoggyList(),
     );
   }
 }

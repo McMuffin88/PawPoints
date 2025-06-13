@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'verify_email_screen.dart';
 import 'login_screen.dart';
@@ -30,10 +31,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
         final auth = FirebaseAuth.instance;
 
         // Registrierung durchführen
-        await auth.createUserWithEmailAndPassword(
+        final userCredential = await auth.createUserWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
+
+        final uid = userCredential.user!.uid;
+        final username = _usernameController.text.trim();
+
+        // In Firestore speichern
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'name': username,
+          'role': 'herrchen',
+        });
 
         // Verifizierungs-Mail senden
         await auth.currentUser?.sendEmailVerification();
@@ -48,7 +58,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           context,
           MaterialPageRoute(
             builder: (_) => VerifyEmailScreen(
-              username: _usernameController.text,
+              username: username,
               email: _emailController.text,
             ),
           ),
