@@ -1,6 +1,8 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pawpoints/doggyaufgabenform.dart';
 
 class HerrchenShopScreen extends StatefulWidget {
   const HerrchenShopScreen({super.key});
@@ -9,267 +11,229 @@ class HerrchenShopScreen extends StatefulWidget {
   State<HerrchenShopScreen> createState() => _HerrchenShopScreenState();
 }
 
-class _HerrchenShopScreenState extends State<HerrchenShopScreen> {
+class _HerrchenShopScreenState extends State<HerrchenShopScreen>
+    with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> _doggys = [];
-  Map<String, int> _points = {};
   String? _selectedDoggy;
-  List<Map<String, dynamic>> _rewards = [];
-  bool _showForm = false;
-
-  final _titleController = TextEditingController();
-  final _descController = TextEditingController();
-  final _pointsController = TextEditingController();
-  String _rewardDoggy = 'Alle';
-  bool _active = true;
-  bool _escalating = false;
-  final _escalateEveryXController = TextEditingController();
-  final _increaseByController = TextEditingController();
+  TabController? _tabController;
+  int _selectedTabIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    _ensureDoggyDefaults().then((_) => _loadData());
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController!.addListener(() {
+      setState(() {
+        _selectedTabIndex = _tabController!.index;
+      });
+    });
+    _loadDoggys();
   }
 
-  Future<void> _ensureDoggyDefaults() async {
-    final prefs = await SharedPreferences.getInstance();
-    final doggyList = prefs.getString('doggys');
-
-    if (doggyList == null || jsonDecode(doggyList).isEmpty) {
-      final defaultDoggys = [
-        {
-          'name': 'Bello',
-          'image': null,
-          'berechtigungen': {
-            'aufgabenHinzufuegen': true,
-            'aufgabenBearbeiten': false,
-            'regelnBearbeiten': false,
-            'notizenBearbeiten': false,
-            'historieBearbeiten': false
-          }
-        },
-        {
-          'name': 'Luna',
-          'image': null,
-          'berechtigungen': {
-            'aufgabenHinzufuegen': true,
-            'aufgabenBearbeiten': true,
-            'regelnBearbeiten': true,
-            'notizenBearbeiten': true,
-            'historieBearbeiten': true
-          }
-        },
-      ];
-      await prefs.setString('doggys', jsonEncode(defaultDoggys));
-    }
+  @override
+  void dispose() {
+    _tabController?.dispose();
+    super.dispose();
   }
 
-  Future<void> _loadData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final doggyList = prefs.getString('doggys');
-    final rewardList = prefs.getString('shop_items');
+  Future<void> _loadDoggys() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-    if (doggyList != null) {
-      _doggys = List<Map<String, dynamic>>.from(jsonDecode(doggyList));
-      if (_doggys.isNotEmpty) {
-        _selectedDoggy = _doggys[0]['name'];
-        for (final doggy in _doggys) {
-          final p = prefs.getInt('points_${doggy['name']}') ?? 0;
-          _points[doggy['name']] = p;
-        }
-      }
-    }
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('doggys')
+        .get();
 
-    if (rewardList != null) {
-      _rewards = List<Map<String, dynamic>>.from(jsonDecode(rewardList));
-    }
-
-    setState(() {});
-  }
-
-  Future<void> _saveRewards() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('shop_items', jsonEncode(_rewards));
-  }
-
-  void _addReward() {
-    final title = _titleController.text.trim();
-    final desc = _descController.text.trim();
-    final points = int.tryParse(_pointsController.text.trim());
-
-    if (title.isEmpty || points == null || _rewardDoggy.isEmpty) return;
-
-    final reward = {
-      'title': title,
-      'description': desc,
-      'points': points,
-      'active': _active,
-      'doggy': _rewardDoggy,
-      'escalating': _escalating,
-      'every_x': int.tryParse(_escalateEveryXController.text.trim()) ?? 0,
-      'increase_by': int.tryParse(_increaseByController.text.trim()) ?? 0
-    };
+    final doggys = snapshot.docs.map((doc) {
+      final data = doc.data();
+      data['id'] = doc.id;
+      return data;
+    }).toList();
 
     setState(() {
-      _rewards.add(reward);
-      _titleController.clear();
-      _descController.clear();
-      _pointsController.clear();
-      _escalating = false;
-      _escalateEveryXController.clear();
-      _increaseByController.clear();
-      _rewardDoggy = 'Alle';
-      _showForm = false;
+      _doggys = doggys;
+      if (_doggys.isNotEmpty) {
+        _selectedDoggy = _doggys.first['id'];
+      }
     });
-    _saveRewards();
   }
 
-  void _toggleReward(int index) {
-    setState(() => _rewards[index]['active'] = !_rewards[index]['active']);
-    _saveRewards();
+  Widget _buildTaskList(String category) {
+    if (_selectedDoggy == null) {
+      return const Center(child: Text('Kein Doggy ausgewählt.'));
+    }
+
+    final String collectionPath = category == 'Belohnung' ? 'rewards' : 'tasks';
+
+    final stream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(_selectedDoggy!)
+        .collection(collectionPath)
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('Keine Einträge gefunden.'));
+        }
+
+        final tasks = snapshot.data!.docs
+            .where((doc) => (doc.data() as Map<String, dynamic>)['category'] == category)
+            .toList();
+
+
+        return ListView.builder(
+          itemCount: tasks.length,
+          itemBuilder: (context, index) {
+            final doc = tasks[index];
+            final task = doc.data() as Map<String, dynamic>;
+            final description = task['description'] ?? '';
+            final iconData = task['icon'] != null
+                ? IconData(task['icon'], fontFamily: task['iconFontFamily'], fontPackage: task['iconFontPackage'])
+                : Icons.task_alt;
+
+            return Card(
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: ListTile(
+                leading: Icon(iconData),
+                title: Text(task['title'] ?? 'Ohne Titel'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (description.isNotEmpty) Text(description),
+                    if (task['points'] != null)
+                      Text(category == 'Belohnung'
+                          ? 'Kosten: ${task['points']} Punkte'
+                          : 'Punkte: ${task['points']}'),
+                  ],
+                ),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'delete') {
+                      FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(_selectedDoggy)
+                          .collection(collectionPath)
+                          .doc(doc.id)
+                          .delete();
+                    } else if (value == 'edit') {
+                      showDialog(
+                        context: context,
+                        builder: (_) => DoggyTaskShopAddButton(
+                          doggys: _doggys,
+                          onTaskAdded: _loadDoggys,
+                          activeTab: category,
+                        ).buildEditDialog(context, task, doc.id),
+                      );
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
+                    PopupMenuItem(value: 'delete', child: Text('Löschen')),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
-  void _removeReward(int index) {
-    setState(() => _rewards.removeAt(index));
-    _saveRewards();
-  }
 
-  List<Widget> _buildRewardForm() {
-    return [
-      TextField(controller: _titleController, decoration: const InputDecoration(labelText: 'Titel')),
-      TextField(controller: _descController, decoration: const InputDecoration(labelText: 'Beschreibung')),
-      TextField(controller: _pointsController, decoration: const InputDecoration(labelText: 'Kosten (Punkte)'), keyboardType: TextInputType.number),
-      DropdownButton<String>(
-        value: _rewardDoggy,
-        onChanged: (val) => setState(() => _rewardDoggy = val ?? 'Alle'),
-        items: [
-          const DropdownMenuItem(value: 'Alle', child: Text('Alle')),
-          ..._doggys.map((d) => DropdownMenuItem(value: d['name'], child: Text(d['name']))),
-        ],
-      ),
-      Row(children: [const Text('Aktiv?'), Switch(value: _active, onChanged: (val) => setState(() => _active = val))]),
-      Row(
-        children: [
-          const Text('Steigend?'),
-          Switch(value: _escalating, onChanged: (val) => setState(() => _escalating = val)),
-          if (_escalating) ...[
-            Expanded(
-              child: TextField(
-                controller: _escalateEveryXController,
-                decoration: const InputDecoration(labelText: 'Jede X. Nutzung'),
-                keyboardType: TextInputType.number,
+  Widget _buildDoggySelector() {
+    return SizedBox(
+      height: 130,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: _doggys.length,
+        itemBuilder: (context, index) {
+          final doggy = _doggys[index];
+          final selected = doggy['id'] == _selectedDoggy;
+
+          return GestureDetector(
+            onTap: () => setState(() => _selectedDoggy = doggy['id']),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                border: Border.all(color: selected ? Colors.blue : Colors.grey),
+                borderRadius: BorderRadius.circular(12),
+                color: selected ? Colors.blue.shade50 : Colors.grey.shade100,
+              ),
+              width: 120,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircleAvatar(
+                    backgroundImage: doggy['profileImageUrl'] != null
+                        ? NetworkImage(doggy['profileImageUrl'])
+                        : null,
+                    radius: 25,
+                    child: doggy['profileImageUrl'] == null
+                        ? const Icon(Icons.pets)
+                        : null,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(doggy['name'] ?? 'Unbenannt', textAlign: TextAlign.center),
+                  if (doggy['age'] != null) Text('Alter: ${doggy['age']}'),
+                  if (doggy['level'] != null) Text('Level: ${doggy['level']}'),
+                ],
               ),
             ),
-            Expanded(
-              child: TextField(
-                controller: _increaseByController,
-                decoration: const InputDecoration(labelText: 'Erhöhung (Punkte)'),
-                keyboardType: TextInputType.number,
-              ),
-            ),
-          ]
-        ],
+          );
+        },
       ),
-      Row(
-        children: [
-          ElevatedButton(onPressed: _addReward, child: const Text('Speichern')),
-          const SizedBox(width: 12),
-          TextButton(onPressed: () => setState(() => _showForm = false), child: const Text('Abbrechen')),
-        ],
-      ),
-      const SizedBox(height: 16),
-    ];
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_doggys.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Shop-Verwaltung')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+    return Scaffold(
+      appBar: AppBar(title: const Text('Shop-Verwaltung')),
+      body: _doggys.isEmpty
+          ? const Center(child: Text('Keine verbundenen Doggys gefunden.'))
+          : Column(
+        children: [
+          const SizedBox(height: 8),
+          _buildDoggySelector(),
+          const SizedBox(height: 12),
+          TabBar(
+            controller: _tabController,
+            labelColor: Theme.of(context).primaryColor,
+            onTap: (index) => setState(() => _selectedTabIndex = index),
+            tabs: const [
+              Tab(text: 'Aufgaben'),
+              Tab(text: 'Belohnungen'),
+              Tab(text: 'Bestrafungen'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
               children: [
-                const Text(
-                  'Du hast aktuell keine Doggys, denen du Belohnungen zuweisen kannst.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 18),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/mydoggys'); // ggf. anpassen
-                  },
-                  child: const Text('Zur "Meine Doggys"-Seite'),
-                ),
+                _buildTaskList('Aufgabe'),
+                _buildTaskList('Belohnung'),
+                _buildTaskList('Bestrafung'),
               ],
             ),
           ),
-        ),
-      );
-    }
-
-    final filteredRewards = _rewards.where((r) => r['doggy'] == _selectedDoggy || r['doggy'] == 'Alle').toList();
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Shop-Verwaltung')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            DropdownButton<String>(
-              value: _selectedDoggy,
-              onChanged: (value) => setState(() => _selectedDoggy = value),
-              items: _doggys
-                  .map<DropdownMenuItem<String>>(
-                    (d) => DropdownMenuItem<String>(
-                      value: d['name'],
-                      child: Text('${d['name']} (${_points[d['name']] ?? 0} Punkte)'),
-                    ),
-                  )
-                  .toList(),
-            ),
-            const SizedBox(height: 12),
-            if (!_showForm)
-              ElevatedButton(
-                onPressed: () => setState(() => _showForm = true),
-                child: const Text('Neue Belohnung hinzufügen'),
-              ),
-            if (_showForm) ..._buildRewardForm(),
-            const Text('Belohnungen:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Expanded(
-              child: filteredRewards.isEmpty
-                  ? const Text('Keine Belohnungen gefunden.')
-                  : ListView.builder(
-                      itemCount: filteredRewards.length,
-                      itemBuilder: (context, index) {
-                        final reward = filteredRewards[index];
-                        return ListTile(
-                          title: Text(reward['title']),
-                          subtitle: Text('${reward['description']}\nKosten: ${reward['points']} Punkte'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Switch(
-                                value: reward['active'] ?? true,
-                                onChanged: (_) => _toggleReward(index),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _removeReward(index),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
+        ],
+      ),
+      floatingActionButton: DoggyTaskShopAddButton(
+        doggys: _doggys,
+        onTaskAdded: _loadDoggys,
+        activeTab: ['Aufgabe', 'Belohnung', 'Bestrafung'][_selectedTabIndex],
       ),
     );
   }

@@ -9,6 +9,7 @@ import 'Start/doggy_join_screen.dart';
 import 'Start/doggy_register_screen.dart';
 import 'herrchen_screen.dart';
 import 'doggy_screen.dart';
+import '/Settings/mydoggys_screen.dart'; // ✅ Import
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,6 +42,30 @@ class PawPointsApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: const StartupScreen(),
+
+      // ✅ Dynamische Navigation mit Parametern ermöglichen
+      onGenerateRoute: (settings) {
+        if (settings.name == '/mydoggys') {
+          final args = settings.arguments as Map<String, dynamic>?;
+
+          if (args != null && args.containsKey('doggys')) {
+            return MaterialPageRoute(
+              builder: (context) => MyDoggysScreen(doggys: args['doggys']),
+            );
+          }
+
+          // Fehlerbehandlung oder leeren Screen anzeigen
+          return MaterialPageRoute(
+            builder: (context) => const Scaffold(
+              body: Center(
+                child: Text('Keine Doggys übergeben.'),
+              ),
+            ),
+          );
+        }
+
+        return null; // → zeigt Fehler wenn unbekannte Route
+      },
     );
   }
 }

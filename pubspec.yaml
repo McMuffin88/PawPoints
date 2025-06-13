@@ -12,6 +12,8 @@ dependencies:
   flutter:
     sdk: flutter
   crypto: ^3.0.3
+  uuid: ^4.0.0
+
 
   # Firebase
   firebase_core: ^2.30.0
