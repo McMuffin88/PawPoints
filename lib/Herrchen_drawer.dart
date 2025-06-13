@@ -8,6 +8,8 @@ import 'Settings/doggy_berechtigungen_screen.dart';
 import 'Settings/herrchen_shop_screen.dart';
 import 'Settings/premium_screen.dart';
 import 'role_selection_screen.dart';
+import 'roadmap_screen.dart';
+
 
 Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImage, List<Map<String, dynamic>> doggys) {
   Future<Map<String, dynamic>?> _loadUserData() async {
@@ -146,7 +148,21 @@ Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImag
           ),
         ),
 
+        ListTile(
+          leading: const Icon(Icons.map_outlined),
+          title: const Text('Roadmap'),
+          onTap: () {
+            Navigator.pop(context);
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const RoadmapScreen()),
+            );
+          },
+        ),
+
         const Divider(),
+
+
 
         ListTile(
           leading: const Icon(Icons.logout, color: Colors.red),

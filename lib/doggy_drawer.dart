@@ -5,6 +5,7 @@ import 'Settings/doggy_profile_screen.dart';
 import 'doggy_shop_screen.dart';
 import 'package:pawpoints/Settings/find_herrchen_screen.dart';
 import 'role_selection_screen.dart';
+import 'roadmap_screen.dart';
 
 Widget buildDoggyDrawer(BuildContext context) {
   final currentUser = FirebaseAuth.instance.currentUser;
@@ -129,6 +130,18 @@ Widget buildDoggyDrawer(BuildContext context) {
                   ),
                 ],
               ),
+            ),
+
+            ListTile(
+              leading: const Icon(Icons.map_outlined),
+              title: const Text('Roadmap'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const RoadmapScreen()),
+                );
+              },
             ),
 
             const Divider(),
