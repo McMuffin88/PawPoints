@@ -74,7 +74,6 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
         .orderBy('createdAt', descending: true)
         .snapshots();
 
-
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
@@ -86,10 +85,10 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
           return const Center(child: Text('Keine Einträge gefunden.'));
         }
 
-        final tasks = snapshot.data!.docs
-            .where((doc) => (doc.data() as Map<String, dynamic>)['category'] == category)
-            .toList();
-
+        final tasks = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return data['category'] == category;
+        }).toList();
 
         return ListView.builder(
           itemCount: tasks.length,
@@ -98,7 +97,9 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
             final task = doc.data() as Map<String, dynamic>;
             final description = task['description'] ?? '';
             final iconData = task['icon'] != null
-                ? IconData(task['icon'], fontFamily: task['iconFontFamily'], fontPackage: task['iconFontPackage'])
+                ? IconData(task['icon'],
+                fontFamily: task['iconFontFamily'],
+                fontPackage: task['iconFontPackage'])
                 : Icons.task_alt;
 
             return Card(
@@ -109,11 +110,69 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (description.isNotEmpty) Text(description),
+                    if (description.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text.rich(
+                          TextSpan(
+                            text: 'Aufgabe: ',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            children: [
+                              TextSpan(
+                                text: description,
+                                style: const TextStyle(fontWeight: FontWeight.normal),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    if (category == 'Aufgabe' && task['linkedRewardId'] != null)
+                      FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(_selectedDoggy)
+                            .collection('rewards')
+                            .doc(task['linkedRewardId'])
+                            .get(),
+                        builder: (context, snap) {
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const Text('🎁 Belohnung: lädt...');
+                          }
+                          if (snap.hasData && snap.data!.exists) {
+                            final reward = snap.data!.data() as Map<String, dynamic>;
+                            return Text('🎁 Belohnung: ${reward['title']}');
+                          }
+                          return const Text('🎁 Belohnung: [nicht gefunden]');
+                        },
+                      ),
+                    if (category == 'Aufgabe' && task['linkedPunishmentId'] != null)
+                      FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(_selectedDoggy)
+                            .collection('tasks')
+                            .doc(task['linkedPunishmentId'])
+                            .get(),
+                        builder: (context, snap) {
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const Text('⚠️ Bestrafung: lädt...');
+                          }
+                          if (snap.hasData && snap.data!.exists) {
+                            final punishment = snap.data!.data() as Map<String, dynamic>;
+                            return Text('⚠️ Bestrafung: ${punishment['title']}');
+                          }
+                          return const Text('⚠️ Bestrafung: [nicht gefunden]');
+                        },
+                      ),
+                    const Divider(),
                     if (task['points'] != null)
-                      Text(category == 'Belohnung'
-                          ? 'Kosten: ${task['points']} Punkte'
-                          : 'Punkte: ${task['points']}'),
+                      Text(
+                        category == 'Belohnung'
+                            ? 'Kosten: ${task['points']} Punkte'
+                            : 'Punkte: ${task['points']}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                   ],
                 ),
                 trailing: PopupMenuButton<String>(
@@ -132,7 +191,11 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
                           doggys: _doggys,
                           onTaskAdded: _loadDoggys,
                           activeTab: category,
-                        ).buildEditDialog(context, task, doc.id),
+                        ).buildEditDialog(context, {
+                          ...task,
+                          'doggyId': _selectedDoggy,
+                        }, doc.id),
+
                       );
                     }
                   },
@@ -148,7 +211,6 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
       },
     );
   }
-
 
   Widget _buildDoggySelector() {
     return SizedBox(
@@ -199,6 +261,8 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
 
   @override
   Widget build(BuildContext context) {
+    final tabs = ['Aufgabe', 'Belohnung', 'Bestrafung'];
+
     return Scaffold(
       appBar: AppBar(title: const Text('Shop-Verwaltung')),
       body: _doggys.isEmpty
@@ -221,11 +285,7 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                _buildTaskList('Aufgabe'),
-                _buildTaskList('Belohnung'),
-                _buildTaskList('Bestrafung'),
-              ],
+              children: tabs.map((tab) => _buildTaskList(tab)).toList(),
             ),
           ),
         ],
@@ -233,7 +293,7 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
       floatingActionButton: DoggyTaskShopAddButton(
         doggys: _doggys,
         onTaskAdded: _loadDoggys,
-        activeTab: ['Aufgabe', 'Belohnung', 'Bestrafung'][_selectedTabIndex],
+        activeTab: tabs[_selectedTabIndex],
       ),
     );
   }
