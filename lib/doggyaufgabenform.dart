@@ -4,6 +4,29 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
 
+// ICON MAP + ALLOWED KEYS
+final Map<String, IconData> iconMap = {
+  'pets': Icons.pets,
+  'school': Icons.school,
+  'shopping_cart': Icons.shopping_cart,
+  'cleaning_services': Icons.cleaning_services,
+  'sports_soccer': Icons.sports_soccer,
+  'emoji_events': Icons.emoji_events,
+  'local_dining': Icons.local_dining,
+  'check_circle': Icons.check_circle,
+};
+
+final List<String> availableIconKeys = [
+  'pets',
+  'school',
+  'shopping_cart',
+  'cleaning_services',
+  'sports_soccer',
+  'emoji_events',
+  'local_dining',
+  'check_circle',
+];
+
 class DoggyTaskShopAddButton extends StatelessWidget {
   final List<Map<String, dynamic>> doggys;
   final VoidCallback onTaskAdded;
@@ -75,20 +98,11 @@ class DoggyTaskShopAddButton extends StatelessWidget {
     bool visibleToDoggy = task?['visibleToDoggy'] ?? true;
     bool canBePurchased = task?['canBePurchased'] ?? true;
 
-    final List<IconData> availableIcons = [
-      Icons.pets,
-      Icons.school,
-      Icons.shopping_cart,
-      Icons.cleaning_services,
-      Icons.sports_soccer,
-      Icons.emoji_events,
-      Icons.local_dining,
-      Icons.check_circle,
-    ];
-
-    IconData selectedIcon = isEditing && task?['icon'] != null
-        ? IconData(task!['icon'], fontFamily: task['iconFontFamily'], fontPackage: task['iconFontPackage'])
-        : availableIcons.first;
+    // <--- AB HIER: IconKey statt IconData!
+    String selectedIconKey = isEditing && task?['icon'] != null && iconMap.containsKey(task?['icon'])
+        ? task!['icon']
+        : availableIconKeys.first;
+    // <--- BIS HIER
 
     return AlertDialog(
       title: Text(isEditing ? 'Eintrag bearbeiten' : 'Eintrag erstellen'),
@@ -106,28 +120,29 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                 .toList();
           }
 
-          return FutureBuilder(
+          return FutureBuilder<List<List<Map<String, dynamic>>>>(
             future: Future.wait([
               if (selectedCategory == 'Aufgabe') loadDropdownData('rewards'),
-              if (selectedCategory == 'Aufgabe') loadDropdownData('tasks'),
+              if (selectedCategory == 'Aufgabe') loadDropdownData('revenge'),
             ]),
             builder: (context, snapshot) {
               final rewards = snapshot.hasData && snapshot.data!.isNotEmpty ? snapshot.data![0] : [];
               final punishments = snapshot.hasData && snapshot.data!.length > 1
-                  ? snapshot.data![1].where((t) => t['category'] == 'Bestrafung').toList()
+                  ? snapshot.data![1]
                   : [];
 
               return SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // ICON-AUSWAHL über Key:
                     Wrap(
                       spacing: 10,
                       runSpacing: 10,
-                      children: availableIcons.map((icon) => ChoiceChip(
-                        label: Icon(icon),
-                        selected: selectedIcon == icon,
-                        onSelected: (_) => setState(() => selectedIcon = icon),
+                      children: availableIconKeys.map((iconKey) => ChoiceChip(
+                        label: Icon(iconMap[iconKey]),
+                        selected: selectedIconKey == iconKey,
+                        onSelected: (_) => setState(() => selectedIconKey = iconKey),
                       )).toList(),
                     ),
                     const SizedBox(height: 16),
@@ -136,10 +151,12 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                       value: selectedDoggyId,
                       isExpanded: true,
                       onChanged: (val) => setState(() => selectedDoggyId = val),
-                      items: doggys.map((doggy) => DropdownMenuItem<String>(
+                      items: doggys
+                          .map((doggy) => DropdownMenuItem<String>(
                         value: doggy['id'],
                         child: Text(doggy['name'] ?? 'Unbenannt'),
-                      )).toList(),
+                      ))
+                          .toList(),
                     ),
                     const SizedBox(height: 8),
                     DropdownButton<String>(
@@ -150,11 +167,21 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                           .map((cat) => DropdownMenuItem<String>(value: cat, child: Text(cat)))
                           .toList(),
                     ),
-                    TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Titel')),
-                    TextField(controller: descriptionController, decoration: const InputDecoration(labelText: 'Beschreibung')),
+                    TextField(
+                      controller: titleController,
+                      decoration: const InputDecoration(labelText: 'Titel'),
+                    ),
+                    TextField(
+                      controller: descriptionController,
+                      decoration: const InputDecoration(labelText: 'Beschreibung'),
+                    ),
 
                     if (selectedCategory == 'Belohnung') ...[
-                      TextField(controller: rewardPriceController, decoration: const InputDecoration(labelText: 'Punktepreis'), keyboardType: TextInputType.number),
+                      TextField(
+                        controller: rewardPriceController,
+                        decoration: const InputDecoration(labelText: 'Punktepreis'),
+                        keyboardType: TextInputType.number,
+                      ),
                       CheckboxListTile(
                         title: const Text('Doggy darf diese Belohnung sehen'),
                         value: visibleToDoggy,
@@ -168,24 +195,32 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                     ],
 
                     if (selectedCategory != 'Belohnung') ...[
-                      TextField(controller: pointsController, decoration: const InputDecoration(labelText: 'Punkte'), keyboardType: TextInputType.number),
+                      TextField(
+                        controller: pointsController,
+                        decoration: const InputDecoration(labelText: 'Punkte'),
+                        keyboardType: TextInputType.number,
+                      ),
 
                       if (selectedCategory == 'Aufgabe') ...[
                         DropdownButton<String>(
-                          value: rewards.any((r) => r['id'] == selectedRewardId) ? selectedRewardId : null,
-                          hint: const Text('Optionale Belohnung auswählen'),
+                          value: selectedRewardId,
+                          hint: const Text('Belohnung auswählen'),
                           isExpanded: true,
                           onChanged: (val) => setState(() => selectedRewardId = val),
-                          items: rewards.map((r) =>
-                              DropdownMenuItem<String>(value: r['id'], child: Text(r['title'] ?? 'Belohnung'))).toList(),
+                          items: rewards
+                              .map((r) => DropdownMenuItem<String>(
+                              value: r['id'], child: Text(r['title'] ?? 'Belohnung')))
+                              .toList(),
                         ),
                         DropdownButton<String>(
-                          value: punishments.any((p) => p['id'] == selectedPunishmentId) ? selectedPunishmentId : null,
-                          hint: const Text('Optionale Bestrafung auswählen'),
+                          value: selectedPunishmentId,
+                          hint: const Text('Bestrafung auswählen'),
                           isExpanded: true,
                           onChanged: (val) => setState(() => selectedPunishmentId = val),
-                          items: punishments.map((p) =>
-                              DropdownMenuItem<String>(value: p['id'], child: Text(p['title'] ?? 'Bestrafung'))).toList(),
+                          items: punishments
+                              .map((p) => DropdownMenuItem<String>(
+                              value: p['id'], child: Text(p['title'] ?? 'Bestrafung')))
+                              .toList(),
                         ),
                       ],
 
@@ -193,9 +228,9 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                                selectedDate != null
-                                    ? 'Fällig: ${DateFormat('dd.MM.yyyy').format(selectedDate!)}'
-                                    : 'Kein Datum gewählt'
+                              selectedDate != null
+                                  ? 'Fällig: ${DateFormat('dd.MM.yyyy').format(selectedDate!)}'
+                                  : 'Kein Datum gewählt',
                             ),
                           ),
                           IconButton(
@@ -204,7 +239,7 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                               final picked = await showDatePicker(
                                 context: context,
                                 initialDate: selectedDate ?? DateTime.now(),
-                                firstDate: DateTime.now(),
+                                firstDate: DateTime.now().subtract(const Duration(days: 365)),
                                 lastDate: DateTime.now().add(const Duration(days: 365)),
                                 locale: const Locale('de', 'DE'),
                               );
@@ -220,6 +255,7 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                               selectedTime != null
                                   ? 'Bis: ${selectedTime!.format(context)}'
                                   : 'Keine Uhrzeit gewählt',
+
                             ),
                           ),
                           IconButton(
@@ -242,11 +278,15 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                           DropdownMenuItem(value: 'einmalig', child: Text('Einmalig')),
                           DropdownMenuItem(value: 'weekly', child: Text('Wöchentlich')),
                           DropdownMenuItem(value: 'monthly', child: Text('Monatlich')),
-                          DropdownMenuItem(value: 'every_x', child: Text('Alle X Tage')),
+                          DropdownMenuItem(value: 'every_', child: Text('Alle X Tage')),
                         ],
                       ),
-                      if (repeatType == 'every_x')
-                        TextField(controller: repeatDaysController, decoration: const InputDecoration(labelText: 'Alle wie viele Tage?'), keyboardType: TextInputType.number),
+                      if (repeatType == 'every_')
+                        TextField(
+                          controller: repeatDaysController,
+                          decoration: const InputDecoration(labelText: 'Alle wie viele Tage?'),
+                          keyboardType: TextInputType.number,
+                        ),
                       DropdownButton<String>(
                         value: frequencyLimit,
                         isExpanded: true,
@@ -258,7 +298,11 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                         ],
                       ),
                       if (frequencyLimit != 'beliebig')
-                        TextField(controller: limitValueController, decoration: const InputDecoration(labelText: 'Limit pro Tag'), keyboardType: TextInputType.number),
+                        TextField(
+                          controller: limitValueController,
+                          decoration: const InputDecoration(labelText: 'Limit pro Tag'),
+                          keyboardType: TextInputType.number,
+                        ),
                     ],
                   ],
                 ),
@@ -278,12 +322,11 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                 ? '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}'
                 : null;
 
+
             final data = {
               'title': titleController.text.trim(),
               'description': descriptionController.text.trim(),
-              'icon': selectedIcon.codePoint,
-              'iconFontFamily': selectedIcon.fontFamily,
-              'iconFontPackage': selectedIcon.fontPackage,
+              'icon': selectedIconKey, // <-- Das ist jetzt ein String!
               'createdBy': user.uid,
               'category': selectedCategory,
               'createdAt': FieldValue.serverTimestamp(),
@@ -302,29 +345,49 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                   .doc(selectedDoggyId)
                   .collection('rewards');
 
-              if (isEditing && taskId != null) {
-                await ref.doc(taskId).update(data);
-              } else {
-                await ref.add(data);
-              }
-            } else {
+              final docRef = (isEditing && taskId != null)
+                ? ref.doc(taskId)
+                : ref.doc();
+              await docRef.set(data);
+
+            } else if (selectedCategory == 'Aufgabe') {
               data.addAll({
                 'points': int.tryParse(pointsController.text.trim()) ?? 0,
-                'due': selectedDate?.toIso8601String(),
-                'dueTime': dueTime,
-                'repeat': repeatType,
+                if (selectedDate != null) 'due': selectedDate!.toIso8601String(),
+                if (dueTime != null) 'dueTime': dueTime,
+                if (repeatType != 'einmalig') 'repeat': repeatType,
                 'frequencyLimit': frequencyLimit,
                 'limitValue': limitValueController.text.trim(),
-                'taskSeriesId': repeatType != 'einmalig' ? taskSeriesId : null,
-                'isSeriesInstance': repeatType != 'einmalig',
-                'linkedRewardId': selectedRewardId,
-                'linkedPunishmentId': selectedPunishmentId,
+                if (repeatType != 'einmalig') 'taskSeriesId': taskSeriesId,
+                if (repeatType != 'einmalig') 'isSeriesInstance': true,
+if (selectedRewardId != null) 'linkedRewardId': selectedRewardId!,
+if (selectedPunishmentId != null) 'linkedPunishmentId': selectedPunishmentId!,
+
               });
 
               final ref = FirebaseFirestore.instance
                   .collection('users')
                   .doc(selectedDoggyId)
                   .collection('tasks');
+
+              if (isEditing && taskId != null) {
+                await ref.doc(taskId).update(data);
+              } else {
+                await ref.add(data);
+              }
+
+            } else if (selectedCategory == 'Bestrafung') {
+              data.addAll({
+                'points': -(int.tryParse(pointsController.text.trim()) ?? 0),
+                if (selectedDate != null) 'due': selectedDate!.toIso8601String(),
+                if (dueTime != null) 'dueTime': dueTime,
+                if (repeatType != 'einmalig') 'repeat': repeatType,
+              });
+
+              final ref = FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(selectedDoggyId)
+                  .collection('revenge');
 
               if (isEditing && taskId != null) {
                 await ref.doc(taskId).update(data);

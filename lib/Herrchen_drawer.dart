@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:pawpoints/Settings/herrchen_notification.dart';
 
 import 'Settings/herrchen_profile_screen.dart';
 import 'Settings/mydoggys_screen.dart';
@@ -9,6 +10,7 @@ import 'Settings/herrchen_shop_screen.dart';
 import 'Settings/premium_screen.dart';
 import 'role_selection_screen.dart';
 import 'roadmap_screen.dart';
+
 
 
 Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImage, List<Map<String, dynamic>> doggys) {
@@ -114,8 +116,17 @@ Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImag
               ExpansionTile(
                 leading: const Icon(Icons.check_circle_outline),
                 title: const Text('Tätigkeiten'),
-                children: const [
-                  ListTile(leading: Icon(Icons.notifications), title: Text('Benachrichtigungen')),
+ children: [
+   ListTile(
+     leading: const Icon(Icons.notifications),
+     title: const Text('Benachrichtigungen'),
+     onTap: () {
+       Navigator.of(context).pop(); // Drawer schließen
+       Navigator.of(context).push(
+         MaterialPageRoute(builder: (_) => const HerrchenNotifications()),
+       );
+     },
+       ),
                   ListTile(leading: Icon(Icons.calendar_month), title: Text('Wöchentliche Zusammenfassung')),
                   ListTile(leading: Icon(Icons.card_giftcard), title: Text('Verlauf Belohnungen')),
                 ],

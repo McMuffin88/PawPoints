@@ -15,17 +15,20 @@ dependencies:
   uuid: ^4.0.0
 
 
+
   # Firebase
   firebase_core: ^2.30.0
   firebase_auth: ^4.17.0
   cloud_firestore: ^4.17.0
   firebase_storage: ^11.7.0
+  firebase_messaging: ^14.0.0
 
   # Sonstiges
   shared_preferences: ^2.2.2
   image_picker: ^1.0.7
   intl: 0.20.2
   qr_flutter: ^4.0.0
+  mobile_scanner: ^4.0.1
 
   # UI / Material
   flutter_localizations:
@@ -35,9 +38,16 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
 
   assets:
     - assets/logo.png
+
+flutter_icons:
+  android: true
+  ios: false # falls du keine iOS-App baust, sonst true
+  adaptive_icon_background: "#8554b0"    # oder dein Lila als Hexfarbe
+  adaptive_icon_foreground: "assets/icon.png"

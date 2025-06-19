@@ -4,6 +4,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pawpoints/doggyaufgabenform.dart';
 
+// ICON-MAP OBEN EINMALIG DEFINIEREN
+final Map<String, IconData> iconMap = {
+  'star': Icons.star,
+  'favorite': Icons.favorite,
+  'home': Icons.home,
+  'pets': Icons.pets,
+  'check': Icons.check,
+  'shopping_cart': Icons.shopping_cart,
+  'reward': Icons.card_giftcard,
+  // beliebig erweitern
+};
+
 class HerrchenShopScreen extends StatefulWidget {
   const HerrchenShopScreen({super.key});
 
@@ -65,7 +77,12 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
       return const Center(child: Text('Kein Doggy ausgewählt.'));
     }
 
-    final String collectionPath = category == 'Belohnung' ? 'rewards' : 'tasks';
+    // Abhängig vom Tab die richtige Collection wählen:
+    final String collectionPath = category == 'Belohnung'
+        ? 'rewards'
+        : category == 'Bestrafung'
+        ? 'revenge'
+        : 'tasks';
 
     final stream = FirebaseFirestore.instance
         .collection('users')
@@ -85,27 +102,30 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
           return const Center(child: Text('Keine Einträge gefunden.'));
         }
 
-        final tasks = snapshot.data!.docs.where((doc) {
+        // Bei tasks und rewards auf category filtern, bei revenge liegt keine category vor
+        final items = snapshot.data!.docs.where((doc) {
+          if (collectionPath == 'revenge') return true;
           final data = doc.data() as Map<String, dynamic>;
           return data['category'] == category;
         }).toList();
 
         return ListView.builder(
-          itemCount: tasks.length,
+          itemCount: items.length,
           itemBuilder: (context, index) {
-            final doc = tasks[index];
+            final doc = items[index];
             final task = doc.data() as Map<String, dynamic>;
             final description = task['description'] ?? '';
-            final iconData = task['icon'] != null
-                ? IconData(task['icon'],
-                fontFamily: task['iconFontFamily'],
-                fontPackage: task['iconFontPackage'])
+
+            // HIER ICONAUSWAHL BEREINIGT!
+            final String? iconKey = task['icon'];
+            final IconData icon = iconKey != null && iconMap.containsKey(iconKey)
+                ? iconMap[iconKey]!
                 : Icons.task_alt;
 
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: ListTile(
-                leading: Icon(iconData),
+                leading: Icon(icon),
                 title: Text(task['title'] ?? 'Ohne Titel'),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -115,7 +135,11 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
                         padding: const EdgeInsets.only(top: 4),
                         child: Text.rich(
                           TextSpan(
-                            text: 'Aufgabe: ',
+                            text: category == 'Belohnung'
+                                ? 'Beschreibung: '
+                                : category == 'Bestrafung'
+                                    ? 'Grund: '
+                                    : 'Aufgabe: ',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                             children: [
                               TextSpan(
@@ -146,12 +170,13 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
                           return const Text('🎁 Belohnung: [nicht gefunden]');
                         },
                       ),
-                    if (category == 'Aufgabe' && task['linkedPunishmentId'] != null)
+                    if (category == 'Aufgabe' &&
+                        task['linkedPunishmentId'] != null)
                       FutureBuilder<DocumentSnapshot>(
                         future: FirebaseFirestore.instance
                             .collection('users')
                             .doc(_selectedDoggy)
-                            .collection('tasks')
+                            .collection('revenge')
                             .doc(task['linkedPunishmentId'])
                             .get(),
                         builder: (context, snap) {
@@ -168,7 +193,7 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
                     const Divider(),
                     if (task['points'] != null)
                       Text(
-                        category == 'Belohnung'
+                        collectionPath == 'rewards'
                             ? 'Kosten: ${task['points']} Punkte'
                             : 'Punkte: ${task['points']}',
                         style: const TextStyle(fontWeight: FontWeight.bold),
@@ -191,11 +216,14 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
                           doggys: _doggys,
                           onTaskAdded: _loadDoggys,
                           activeTab: category,
-                        ).buildEditDialog(context, {
-                          ...task,
-                          'doggyId': _selectedDoggy,
-                        }, doc.id),
-
+                        ).buildEditDialog(
+                          context,
+                          {
+                            ...task,
+                            'doggyId': _selectedDoggy,
+                          },
+                          doc.id,
+                        ),
                       );
                     }
                   },
@@ -268,28 +296,28 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
       body: _doggys.isEmpty
           ? const Center(child: Text('Keine verbundenen Doggys gefunden.'))
           : Column(
-        children: [
-          const SizedBox(height: 8),
-          _buildDoggySelector(),
-          const SizedBox(height: 12),
-          TabBar(
-            controller: _tabController,
-            labelColor: Theme.of(context).primaryColor,
-            onTap: (index) => setState(() => _selectedTabIndex = index),
-            tabs: const [
-              Tab(text: 'Aufgaben'),
-              Tab(text: 'Belohnungen'),
-              Tab(text: 'Bestrafungen'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: tabs.map((tab) => _buildTaskList(tab)).toList(),
+              children: [
+                const SizedBox(height: 8),
+                _buildDoggySelector(),
+                const SizedBox(height: 12),
+                TabBar(
+                  controller: _tabController,
+                  labelColor: Theme.of(context).primaryColor,
+                  onTap: (index) => setState(() => _selectedTabIndex = index),
+                  tabs: const [
+                    Tab(text: 'Aufgaben'),
+                    Tab(text: 'Belohnungen'),
+                    Tab(text: 'Bestrafungen'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: tabs.map((tab) => _buildTaskList(tab)).toList(),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
       floatingActionButton: DoggyTaskShopAddButton(
         doggys: _doggys,
         onTaskAdded: _loadDoggys,
