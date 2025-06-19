@@ -7,6 +7,7 @@ import 'package:pawpoints/Settings/find_herrchen_screen.dart';
 import 'role_selection_screen.dart';
 import 'roadmap_screen.dart';
 
+
 Widget buildDoggyDrawer(BuildContext context) {
   final currentUser = FirebaseAuth.instance.currentUser;
 
@@ -89,19 +90,18 @@ Widget buildDoggyDrawer(BuildContext context) {
                     leading: const Icon(Icons.shopping_bag),
                     title: const Text('Tätigkeiten'),
                     children: [
-                      ListTile(
-                        leading: const Icon(Icons.card_giftcard),
-                        title: const Text('Shop'),
-                        onTap: () {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => DoggyShopScreen(doggyName: doggyName),
-                            ),
-                          );
-                        },
-                      ),
+ListTile(
+  leading: const Icon(Icons.shop),
+  title: const Text('Shop'),
+  onTap: () {
+    Navigator.pop(context); // erst Drawer schließen
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const DoggyShopScreen()),
+    );
+  },
+),
+
                     ],
                   ),
                   ExpansionTile(

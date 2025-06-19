@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class RoadmapScreen extends StatelessWidget {
   const RoadmapScreen({super.key});
@@ -11,36 +12,39 @@ class RoadmapScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           const _SectionHeader(icon: Icons.bug_report, title: 'Bugfixes'),
-          const _RoadmapCard(text: '🐞 Beim Profilanpassen das Burgermenü durch das Profilbild ersetzen'),
+          _RoadmapCard(id: 'bug_profile_menu', text: '🐞 Beim Profilanpassen das Burgermenü durch das Profilbild ersetzen'),
 
           const SizedBox(height: 16),
           const _SectionHeader(icon: Icons.task_alt, title: 'Nächste To-Dos'),
-          const _RoadmapCard(
+          _RoadmapCard(
+            id: 'todo_doggy_view',
             text: '📌 Doggy-Ansicht / Doggy Screen anpassen, sodass Bestrafungen gefiltert werden und Aufgaben durchkommen',
           ),
-          const _RoadmapCard(
+          _RoadmapCard(
+            id: 'todo_shop_view',
             text: '📌 Shop-Ansicht für Doggys mit Belohnungen füllen',
           ),
-          const _RoadmapCard(
+          _RoadmapCard(
+            id: 'todo_expandable_tasks',
             text: '📌 Ausklappbare Aufgaben in der Doggy-Ansicht, damit vollständige Belohnungen oder Bestrafungen sichtbar sind',
           ),
 
           const SizedBox(height: 24),
           const _SectionHeader(icon: Icons.auto_awesome, title: 'Features'),
-          const _RoadmapCard(text: '✅ Berechtigungen mit echter Berechtigungslogik füllen'),
-          const _RoadmapCard(text: '✅ Nachrichtenfunktion zwischen Doggy und Herrchen'),
-          const _RoadmapCard(text: '✅ Fotobeweis-Funktion bei erledigten Aufgaben'),
-          const _RoadmapCard(text: '✅ Individuelle Nachricht nach Erledigung einer Aufgabe'),
+          _RoadmapCard(id: 'feat_permissions', text: '✅ Berechtigungen mit echter Berechtigungslogik füllen'),
+          _RoadmapCard(id: 'feat_messaging', text: '✅ Nachrichtenfunktion zwischen Doggy und Herrchen'),
+          _RoadmapCard(id: 'feat_photo_proof', text: '✅ Fotobeweis-Funktion bei erledigten Aufgaben'),
+          _RoadmapCard(id: 'feat_custom_message', text: '✅ Individuelle Nachricht nach Erledigung einer Aufgabe'),
 
           const SizedBox(height: 24),
           const _SectionHeader(icon: Icons.workspace_premium, title: 'Premium Extras'),
-          const _RoadmapCard(text: '👑 Exklusive Avatare für Doggys'),
-          const _RoadmapCard(text: '👑 Premium-Hintergründe & Themes'),
-          const _RoadmapCard(text: '👑 Frühzeitiger Zugriff auf neue Funktionen'),
-          const _RoadmapCard(text: '💡 Punkte in Bark / Knochen / Leckerli umwandelbar machen'),
-          const _RoadmapCard(text: '💡 Belohnungen & Bestrafungen ausblendbar machen'),
-          const _RoadmapCard(text: '👑 Doggys können aktiv nach Herrchen suchen'),
-          const _RoadmapCard(text: '👑 Herrchen können freie Doggys in ihrer Umgebung suchen'),
+          _RoadmapCard(id: 'premium_avatars', text: '👑 Exklusive Avatare für Doggys'),
+          _RoadmapCard(id: 'premium_themes', text: '👑 Premium-Hintergründe & Themes'),
+          _RoadmapCard(id: 'premium_early_access', text: '👑 Frühzeitiger Zugriff auf neue Funktionen'),
+          _RoadmapCard(id: 'premium_convert_points', text: '💡 Punkte in Bark / Knochen / Leckerli umwandelbar machen'),
+          _RoadmapCard(id: 'premium_hide_rewards', text: '💡 Belohnungen & Bestrafungen ausblendbar machen'),
+          _RoadmapCard(id: 'premium_search_doggys', text: '👑 Doggys können aktiv nach Herrchen suchen'),
+          _RoadmapCard(id: 'premium_find_free_doggys', text: '👑 Herrchen können freie Doggys in ihrer Umgebung suchen'),
         ],
       ),
     );
@@ -65,10 +69,36 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _RoadmapCard extends StatelessWidget {
+class _RoadmapCard extends StatefulWidget {
+  final String id;
   final String text;
 
-  const _RoadmapCard({required this.text});
+  const _RoadmapCard({required this.id, required this.text});
+
+  @override
+  State<_RoadmapCard> createState() => _RoadmapCardState();
+}
+
+class _RoadmapCardState extends State<_RoadmapCard> {
+  bool _isDone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadState();
+  }
+
+  Future<void> _loadState() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isDone = prefs.getBool(widget.id) ?? false;
+    });
+  }
+
+  Future<void> _updateState(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(widget.id, value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +106,30 @@ class _RoadmapCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Text(text, style: const TextStyle(fontSize: 16)),
+        child: Row(
+          children: [
+            Checkbox(
+              value: _isDone,
+              onChanged: (value) {
+                final newValue = value ?? false;
+                setState(() {
+                  _isDone = newValue;
+                });
+                _updateState(newValue);
+              },
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                widget.text,
+                style: TextStyle(
+                  fontSize: 16,
+                  decoration: _isDone ? TextDecoration.lineThrough : TextDecoration.none,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

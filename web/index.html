@@ -1,38 +1,73 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
+  <meta charset="UTF-8" />
+  <title>PawPoints</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
+  <!-- 1) Compat-Bibliotheken laden -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-messaging-compat.js"></script>
+  <script>
+    // 2) Firebase-Konfiguration
+    const firebaseConfig = {
+      apiKey: "AIzaSyDRULs-S5ZLE7-d03JYF88i2H5Jol6Q1HU",
+      authDomain: "pawpoints-298c1.firebaseapp.com",
+      projectId: "pawpoints-298c1",
+      messagingSenderId: "229712878962",
+      appId: "1:229712878962:web:99ac8525697a3fcad691eb"
+    };
+    firebase.initializeApp(firebaseConfig);
 
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+    // 3) Messaging-Instanz
+    const messaging = firebase.messaging();
 
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
-  <base href="$FLUTTER_BASE_HREF">
-
-  <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
-
-  <!-- iOS meta tags & icons -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="pawpoints">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
-
-  <title>pawpoints</title>
-  <link rel="manifest" href="manifest.json">
+    // 4) Dein VAPID-Key
+    const vapidKey = "BB0TnU5OKJZAwKuJKgNvC_fgUF0fLwRgG9bqa2UmOXVmh4l1WwJ0CVtizRvM3HT5WEe0s8HSS4UI4MIx6sYO-ho";
+  </script>
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <!-- Flutter-Web-Bundle -->
+  <script src="main.dart.js"></script>
+
+  <script>
+    // 5) Service-Worker registrieren und Push-Setup
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('firebase-messaging-sw.js')
+        .then(registration => {
+          console.log('✅ SW registriert:', registration.scope);
+
+          // Notification-Berechtigung einholen
+          return Notification.requestPermission().then(permission => {
+            console.log('🔔 Notification permission:', permission);
+            if (permission !== 'granted') {
+              console.warn('⚠️ Notification-Permission nicht erteilt.');
+              throw new Error('Permission denied');
+            }
+            // Token holen
+            return messaging.getToken({
+              vapidKey,
+              serviceWorkerRegistration: registration
+            });
+          });
+        })
+        .then(token => {
+          console.log('🔑 [DEBUG] FCM-Token erhalten:', token);
+          // → hier in Firestore speichern
+        })
+        .catch(err => {
+          console.error('❌ SW/Token-Setup fehlgeschlagen:', err);
+        });
+
+      // 6) Vordergrund-Nachrichten abfangen
+      messaging.onMessage(msg => {
+        console.log('🔔 [FCM.notification]:', msg.notification);
+        console.log('ℹ️ [FCM.data]:', msg.data);
+      });
+    } else {
+      console.warn('⚠️ ServiceWorker nicht unterstützt.');
+    }
+  </script>
 </body>
 </html>
