@@ -8,14 +8,12 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 import 'firebase_options.dart';
 
 import 'doggy_screen.dart';
 import 'herrchen_screen.dart';
-
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher_string.dart';
-
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,23 +30,56 @@ class PawPointsApp extends StatelessWidget {
   const PawPointsApp({super.key});
   @override
   Widget build(BuildContext context) {
+    final orange = const Color(0xFFFF6F00);
     return MaterialApp(
-      title: 'PawPoints',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.brown),
-        useMaterial3: true,
+      title: 'PawPoints',
+      theme: ThemeData.dark(useMaterial3: true).copyWith(
+        colorScheme: ColorScheme.dark(
+          primary: orange,
+          secondary: orange.shade700,
+          onPrimary: Colors.black,
+          surface: const Color(0xFF121212),
+          onSurface: Colors.white70,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white10,
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(24),
+              borderSide: BorderSide.none),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          hintStyle: const TextStyle(color: Colors.white54),
+          labelStyle: const TextStyle(color: Colors.white70),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: orange,
+            foregroundColor: Colors.black,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: orange,
+            textStyle: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
       ),
-      home: const AuthWrapper(),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [
-        Locale('de', ''),
-        Locale('en', ''),
+        Locale('de'),
+        Locale('en'),
       ],
+      home: const AuthWrapper(),
     );
   }
 }
@@ -92,7 +123,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
           .call({'currentVersion': currentVersion});
 
       final data = result.data as Map<String, dynamic>;
-
       final bool outdated = data['outdated'] ?? false;
       final String? updateUrl = data['updateUrl'];
 
@@ -139,7 +169,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
     setState(() => loading = true);
     await user.reload();
     final currentUser = FirebaseAuth.instance.currentUser;
-
     if (currentUser == null) {
       setState(() => loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -251,12 +280,23 @@ class _AuthWrapperState extends State<AuthWrapper> {
           : Scaffold(
               body: Center(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(32),
+                  padding: const EdgeInsets.all(24),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.asset('assets/logo.png', height: 160),
+                      // HEADER IMAGE
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: Image.asset(
+                          'assets/login_header.jpg',
+                          width: double.infinity,
+                          height: 180,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
                       const SizedBox(height: 24),
+
+                      // LOGIN or REGISTER form
                       if (_showProfileForm && _user != null)
                         ProfileForm(
                           user: _user!,
@@ -306,9 +346,9 @@ class _LoginFormState extends State<LoginForm> {
     } else {
       // Benutzername -> Email via Cloud Function
       try {
-final result = await FirebaseFunctions.instance
-  .httpsCallable('usernameToEmail')
-  .call({'username': _loginInput.text.trim()});
+        final result = await FirebaseFunctions.instance
+            .httpsCallable('usernameToEmail')
+            .call({'username': _loginInput.text.trim()});
         return result.data['email'] as String;
       } catch (e) {
         throw Exception('Benutzername nicht gefunden');
@@ -320,14 +360,11 @@ final result = await FirebaseFunctions.instance
     setState(() => _loading = true);
     try {
       final email = await _getEmailFromLogin(_loginInput.text);
-if (kIsWeb) {
-  if (_rememberMe) {
-    await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
-  } else {
-    await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
-  }
-}
-
+      if (_rememberMe) {
+        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      } else {
+        await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
+      }
       final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: email, password: _pw.text.trim());
       await widget.onSuccess(cred.user!);
@@ -361,65 +398,96 @@ if (kIsWeb) {
   @override
   Widget build(BuildContext context) {
     return Card(
-        elevation: 6,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Willkommen zurück',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            const Text('Melde dich mit Benutzername oder E-Mail an'),
-            const SizedBox(height: 18),
+      color: const Color(0xFF1C1C1C),
+      elevation: 12,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Willkommen zurück',
+              style: TextStyle(
+                  fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Melde dich mit Benutzername oder E-Mail an',
+              style: TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 24),
             TextField(
               controller: _loginInput,
+              style: const TextStyle(color: Colors.white),
               decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.person),
-                  labelText: 'Benutzername oder E-Mail'),
+                prefixIcon: Icon(Icons.person, color: Colors.white70),
+                labelText: 'Benutzername oder E-Mail',
+                labelStyle: TextStyle(color: Colors.white70),
+              ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
             TextField(
               controller: _pw,
+              style: const TextStyle(color: Colors.white),
               obscureText: !_pwVisible,
               decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.lock),
-                  labelText: 'Passwort',
-                  suffixIcon: IconButton(
-                      icon: Icon(
-                          _pwVisible ? Icons.visibility : Icons.visibility_off),
-                      onPressed: () => setState(() => _pwVisible = !_pwVisible))),
+                prefixIcon: const Icon(Icons.lock, color: Colors.white70),
+                labelText: 'Passwort',
+                labelStyle: const TextStyle(color: Colors.white70),
+                suffixIcon: IconButton(
+                    icon: Icon(
+                      _pwVisible ? Icons.visibility : Icons.visibility_off,
+                      color: Colors.white70,
+                    ),
+                    onPressed: () => setState(() => _pwVisible = !_pwVisible)),
+              ),
             ),
             Row(
               children: [
                 Checkbox(
                     value: _rememberMe,
+                    fillColor: MaterialStateProperty.all(const Color(0xFFFF6F00)),
+                    checkColor: Colors.black,
                     onChanged: (v) => setState(() => _rememberMe = v ?? false)),
-                const Text('Angemeldet bleiben'),
+                const Text(
+                  'Angemeldet bleiben',
+                  style: TextStyle(color: Colors.white70),
+                ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _loading ? null : _login,
-                child:
-                    _loading ? const CircularProgressIndicator() : const Text('Anmelden'),
+                child: _loading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          color: Colors.black,
+                        ),
+                      )
+                    : const Text('Anmelden'),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 14),
             Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text("Noch keinen Account? "),
-                  GestureDetector(
-                    onTap: widget.onSwitch,
-                    child: const Text("Registrieren",
-                        style: TextStyle(
-                            color: Colors.blue, fontWeight: FontWeight.bold)),
-                  ),
-                ])
-          ]),
-        ));
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  "Noch keinen Account? ",
+                  style: TextStyle(color: Colors.white70),
+                ),
+                TextButton(onPressed: widget.onSwitch, child: const Text("Registrieren"))
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -478,50 +546,69 @@ class _RegisterFormState extends State<RegisterForm> {
   @override
   Widget build(BuildContext context) {
     return Card(
-        elevation: 6,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Registrieren',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            TextField(controller: _email, decoration: const InputDecoration(labelText: "E-Mail")),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _pw,
-              obscureText: !_pwVisible,
-              decoration: InputDecoration(
-                  labelText: 'Passwort',
-                  suffixIcon: IconButton(
-                      icon: Icon(
-                          _pwVisible ? Icons.visibility : Icons.visibility_off),
-                      onPressed: () => setState(() => _pwVisible = !_pwVisible))),
+      color: const Color(0xFF1C1C1C),
+      elevation: 12,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 28),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text(
+            'Registrieren',
+            style: TextStyle(
+                fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _email,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              labelText: "E-Mail",
+              labelStyle: TextStyle(color: Colors.white70),
             ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _loading ? null : _register,
-                child: _loading
-                    ? const CircularProgressIndicator()
-                    : const Text("Registrieren"),
-              ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _pw,
+            style: const TextStyle(color: Colors.white),
+            obscureText: !_pwVisible,
+            decoration: InputDecoration(
+              labelText: 'Passwort',
+              labelStyle: const TextStyle(color: Colors.white70),
+              suffixIcon: IconButton(
+                  icon: Icon(
+                      _pwVisible ? Icons.visibility : Icons.visibility_off,
+                      color: Colors.white70),
+                  onPressed: () => setState(() => _pwVisible = !_pwVisible)),
             ),
-            const SizedBox(height: 8),
-            Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text("Schon registriert? "),
-                  GestureDetector(
-                    onTap: widget.onSwitch,
-                    child: const Text("Anmelden",
-                        style: TextStyle(
-                            color: Colors.blue, fontWeight: FontWeight.bold)),
-                  ),
-                ])
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _loading ? null : _register,
+              child: _loading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 3,
+                        color: Colors.black,
+                      ),
+                    )
+                  : const Text("Registrieren"),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Text(
+              "Schon registriert? ",
+              style: TextStyle(color: Colors.white70),
+            ),
+            TextButton(onPressed: widget.onSwitch, child: const Text("Anmelden"))
           ]),
-        ));
+        ]),
+      ),
+    );
   }
 }
 
@@ -757,15 +844,16 @@ class _ProfileFormState extends State<ProfileForm> {
       imageProvider = NetworkImage(_profileImageUrl!);
     }
     return Card(
-        elevation: 6,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        color: const Color(0xFF1C1C1C),
+        elevation: 12,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 const Text('Profildaten vervollständigen',
                     style:
-                        TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                        TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white)),
                 if (widget.missingFields.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8, bottom: 12),
@@ -778,42 +866,49 @@ class _ProfileFormState extends State<ProfileForm> {
                 GestureDetector(
                   onTap: _pickProfileImage,
                   child: CircleAvatar(
-                    radius: 52,
+                    radius: 56,
                     backgroundImage: imageProvider,
                     child: imageProvider == null
-                        ? const Icon(Icons.person, size: 52)
+                        ? const Icon(Icons.person, size: 56)
                         : null,
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text("Profilbild hochladen",
-                    style: TextStyle(color: Colors.blue)),
-                const SizedBox(height: 14),
+                    style: TextStyle(color: Colors.orange.shade700)),
+                const SizedBox(height: 16),
                 TextField(
                   controller: _benutzername,
+                  style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
-                      labelText: "Benutzername",
-                      hintText: "Wähle deinen öffentlichen Namen aus"),
+                    labelText: "Benutzername",
+                    hintText: "Wähle deinen öffentlichen Namen aus",
+                  ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 TextField(
                   controller: _vorname,
+                  style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                      labelText: "Vorname",
-                      suffixIcon: infoIcon("Wird nie für andere Nutzer angezeigt")),
+                    labelText: "Vorname",
+                    suffixIcon: infoIcon("Wird nie für andere Nutzer angezeigt"),
+                  ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 TextField(
                   controller: _nachname,
+                  style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                      labelText: "Nachname",
-                      suffixIcon: infoIcon("Wird nie für andere Nutzer angezeigt")),
+                    labelText: "Nachname",
+                    suffixIcon: infoIcon("Wird nie für andere Nutzer angezeigt"),
+                  ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 GestureDetector(
                   onTap: () => _pickGeburtsdatum(context),
                   child: AbsorbPointer(
                     child: TextField(
+                      style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                           labelText: 'Geburtsdatum',
                           hintText: 'TT.MM.JJJJ',
@@ -826,89 +921,112 @@ class _ProfileFormState extends State<ProfileForm> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 if (age != null)
                   Row(children: [
-                    Text("Alter: $age"),
-                    const SizedBox(width: 12),
+                    Text("Alter: $age", style: const TextStyle(color: Colors.white)),
+                    const SizedBox(width: 14),
                     Checkbox(
                         value: _ageHidden,
+                        fillColor:
+                            MaterialStateProperty.all(Colors.orange.shade700),
+                        checkColor: Colors.black,
                         onChanged: (v) => setState(() => _ageHidden = v ?? false)),
-                    const Text("Alter nicht anzeigen"),
+                    Text("Alter nicht anzeigen",
+                        style: TextStyle(color: Colors.white70)),
                   ]),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: _gender,
+                  dropdownColor: const Color(0xFF2A2A2A),
+                  style: const TextStyle(color: Colors.white),
                   items: ["männlich", "weiblich", "divers"]
-                      .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                      .map((g) => DropdownMenuItem(
+                            value: g,
+                            child: Text(g, style: const TextStyle(color: Colors.white)),
+                          ))
                       .toList(),
                   onChanged: (v) => setState(() => _gender = v ?? "männlich"),
                   decoration: const InputDecoration(labelText: "Geschlecht"),
                 ),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _plz,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                          labelText: "PLZ (optional)",
-                          suffixIcon: infoIcon(
-                              "PLZ und Ort sind optional. Für regionale Premium-Suchfunktionen benötigt.")),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _city,
-                      decoration: InputDecoration(
-                          labelText: "Ort (optional)",
-                          suffixIcon: infoIcon(
-                              "PLZ und Ort sind optional. Für regionale Premium-Suchfunktionen benötigt.")),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _plz,
+                  style: const TextStyle(color: Colors.white),
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                      labelText: "PLZ (optional)",
+                      suffixIcon: infoIcon(
+                          "PLZ und Ort sind optional. Für regionale Premium-Suchfunktionen benötigt.")),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _city,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                      labelText: "Ort (optional)",
+                      suffixIcon: infoIcon(
+                          "PLZ und Ort sind optional. Für regionale Premium-Suchfunktionen benötigt.")),
+                ),
+                const SizedBox(height: 16),
                 Row(children: [
                   Checkbox(
                       value: _roles.contains('doggy'),
+                      fillColor:
+                          MaterialStateProperty.all(Colors.orange.shade700),
+                      checkColor: Colors.black,
                       onChanged: (v) => setState(() {
                             v == true
                                 ? _roles.add('doggy')
                                 : _roles.remove('doggy');
                           })),
-                  const Text('Doggy'),
+                  const Text('Doggy', style: TextStyle(color: Colors.white)),
+                  const SizedBox(width: 20),
                   Checkbox(
                       value: _roles.contains('herrchen'),
+                      fillColor:
+                          MaterialStateProperty.all(Colors.orange.shade700),
+                      checkColor: Colors.black,
                       onChanged: (v) => setState(() {
                             v == true
                                 ? _roles.add('herrchen')
                                 : _roles.remove('herrchen');
                           })),
-                  const Text('Herrchen'),
+                  const Text('Herrchen', style: TextStyle(color: Colors.white)),
                 ]),
                 Row(children: [
                   Checkbox(
                       value: _diskretModus,
+                      fillColor:
+                          MaterialStateProperty.all(Colors.orange.shade700),
+                      checkColor: Colors.black,
                       onChanged: (v) => setState(() => _diskretModus = v ?? false)),
-                  const Text("Diskreter Modus (App mit PIN sichern)"),
+                  const Text("Diskreter Modus (App mit PIN sichern)",
+                      style: TextStyle(color: Colors.white)),
                 ]),
                 if (_diskretModus)
                   TextField(
                     controller: _pin,
+                    style: const TextStyle(color: Colors.white),
                     obscureText: true,
                     keyboardType: TextInputType.number,
                     maxLength: 6,
                     decoration: const InputDecoration(labelText: "PIN (6-stellig)"),
                   ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: _loading ? null : _saveProfile,
                     child: _loading
-                        ? const CircularProgressIndicator()
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              color: Colors.black,
+                            ),
+                          )
                         : const Text("Profil speichern"),
                   ),
                 ),
@@ -916,4 +1034,3 @@ class _ProfileFormState extends State<ProfileForm> {
             )));
   }
 }
-
