@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'doggy_drawer.dart'; // Pfad ggf. anpassen
 
 class DoggyShopScreen extends StatelessWidget {
-  const DoggyShopScreen({Key? key}) : super(key: key);
+  const DoggyShopScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

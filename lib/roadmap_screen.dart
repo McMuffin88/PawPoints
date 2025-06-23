@@ -10,12 +10,12 @@ class RoadmapScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Roadmap')),
       body: ListView(
         padding: const EdgeInsets.all(16),
-        children: [
-          const _SectionHeader(icon: Icons.bug_report, title: 'Bugfixes'),
+        children: const [
+          _SectionHeader(icon: Icons.bug_report, title: 'Bugfixes'),
           _RoadmapCard(id: 'bug_profile_menu', text: '🐞 Beim Profilanpassen das Burgermenü durch das Profilbild ersetzen'),
 
-          const SizedBox(height: 16),
-          const _SectionHeader(icon: Icons.task_alt, title: 'Nächste To-Dos'),
+          SizedBox(height: 16),
+          _SectionHeader(icon: Icons.task_alt, title: 'Nächste To-Dos'),
           _RoadmapCard(
             id: 'todo_doggy_view',
             text: '📌 Doggy-Ansicht / Doggy Screen anpassen, sodass Bestrafungen gefiltert werden und Aufgaben durchkommen',
@@ -29,15 +29,15 @@ class RoadmapScreen extends StatelessWidget {
             text: '📌 Ausklappbare Aufgaben in der Doggy-Ansicht, damit vollständige Belohnungen oder Bestrafungen sichtbar sind',
           ),
 
-          const SizedBox(height: 24),
-          const _SectionHeader(icon: Icons.auto_awesome, title: 'Features'),
+          SizedBox(height: 24),
+          _SectionHeader(icon: Icons.auto_awesome, title: 'Features'),
           _RoadmapCard(id: 'feat_permissions', text: '✅ Berechtigungen mit echter Berechtigungslogik füllen'),
           _RoadmapCard(id: 'feat_messaging', text: '✅ Nachrichtenfunktion zwischen Doggy und Herrchen'),
           _RoadmapCard(id: 'feat_photo_proof', text: '✅ Fotobeweis-Funktion bei erledigten Aufgaben'),
           _RoadmapCard(id: 'feat_custom_message', text: '✅ Individuelle Nachricht nach Erledigung einer Aufgabe'),
 
-          const SizedBox(height: 24),
-          const _SectionHeader(icon: Icons.workspace_premium, title: 'Premium Extras'),
+          SizedBox(height: 24),
+          _SectionHeader(icon: Icons.workspace_premium, title: 'Premium Extras'),
           _RoadmapCard(id: 'premium_avatars', text: '👑 Exklusive Avatare für Doggys'),
           _RoadmapCard(id: 'premium_themes', text: '👑 Premium-Hintergründe & Themes'),
           _RoadmapCard(id: 'premium_early_access', text: '👑 Frühzeitiger Zugriff auf neue Funktionen'),

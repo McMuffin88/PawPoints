@@ -104,10 +104,10 @@ ListTile(
 
                     ],
                   ),
-                  ExpansionTile(
-                    leading: const Icon(Icons.settings),
-                    title: const Text('Einstellungen'),
-                    children: const [
+                  const ExpansionTile(
+                    leading: Icon(Icons.settings),
+                    title: Text('Einstellungen'),
+                    children: [
                       ListTile(leading: Icon(Icons.notifications), title: Text('Benachrichtigungen')),
                       ListTile(leading: Icon(Icons.lock), title: Text('Zugangs-PIN')),
                       ListTile(leading: Icon(Icons.color_lens), title: Text('Erscheinungsbild')),
@@ -118,10 +118,10 @@ ListTile(
                       ListTile(leading: Icon(Icons.upload_file), title: Text('Vorlage exportieren')),
                     ],
                   ),
-                  ExpansionTile(
-                    leading: const Icon(Icons.support),
-                    title: const Text('Support'),
-                    children: const [
+                  const ExpansionTile(
+                    leading: Icon(Icons.support),
+                    title: Text('Support'),
+                    children: [
                       ListTile(leading: Icon(Icons.help), title: Text('FAQ')),
                       ListTile(leading: Icon(Icons.feedback), title: Text('Feedback')),
                       ListTile(leading: Icon(Icons.privacy_tip), title: Text('Datenschutz')),

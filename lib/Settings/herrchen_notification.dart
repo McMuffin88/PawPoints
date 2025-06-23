@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class HerrchenNotifications extends StatelessWidget {
-  const HerrchenNotifications({Key? key}) : super(key: key);
+  const HerrchenNotifications({super.key});
 
   @override
   Widget build(BuildContext context) {

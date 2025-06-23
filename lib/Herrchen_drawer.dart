@@ -14,7 +14,7 @@ import 'roadmap_screen.dart';
 
 
 Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImage, List<Map<String, dynamic>> doggys) {
-  Future<Map<String, dynamic>?> _loadUserData() async {
+  Future<Map<String, dynamic>?> loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
 
@@ -26,7 +26,7 @@ Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImag
     child: Column(
       children: [
         FutureBuilder<Map<String, dynamic>?>(
-          future: _loadUserData(),
+          future: loadUserData(),
           builder: (context, snapshot) {
             final data = snapshot.data;
             final name = data?['name'] ?? 'Herrchen';
@@ -127,14 +127,14 @@ Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImag
        );
      },
        ),
-                  ListTile(leading: Icon(Icons.calendar_month), title: Text('Wöchentliche Zusammenfassung')),
-                  ListTile(leading: Icon(Icons.card_giftcard), title: Text('Verlauf Belohnungen')),
+                  const ListTile(leading: Icon(Icons.calendar_month), title: Text('Wöchentliche Zusammenfassung')),
+                  const ListTile(leading: Icon(Icons.card_giftcard), title: Text('Verlauf Belohnungen')),
                 ],
               ),
-              ExpansionTile(
-                leading: const Icon(Icons.settings),
-                title: const Text('Einstellungen'),
-                children: const [
+              const ExpansionTile(
+                leading: Icon(Icons.settings),
+                title: Text('Einstellungen'),
+                children: [
                   ListTile(leading: Icon(Icons.notifications_active), title: Text('Benachrichtigungen')),
                   ListTile(leading: Icon(Icons.lock), title: Text('Zugangs-PIN')),
                   ListTile(leading: Icon(Icons.palette), title: Text('Erscheinungsbild')),
@@ -145,10 +145,10 @@ Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImag
                   ListTile(leading: Icon(Icons.download), title: Text('Vorlage exportieren')),
                 ],
               ),
-              ExpansionTile(
-                leading: const Icon(Icons.help_outline),
-                title: const Text('Support'),
-                children: const [
+              const ExpansionTile(
+                leading: Icon(Icons.help_outline),
+                title: Text('Support'),
+                children: [
                   ListTile(leading: Icon(Icons.question_answer), title: Text('FAQ')),
                   ListTile(leading: Icon(Icons.feedback), title: Text('Support und Feedback')),
                   ListTile(leading: Icon(Icons.article), title: Text('Nutzungsbedingungen')),
