@@ -22,7 +22,7 @@ final Map<String, IconData> iconMap = {
 };
 
 class DoggyScreen extends StatefulWidget {
-  const DoggyScreen({Key? key}) : super(key: key);
+  const DoggyScreen({super.key});
 
   @override
   State<DoggyScreen> createState() => _DoggyScreenState();
@@ -205,8 +205,9 @@ class _DoggyScreenState extends State<DoggyScreen> {
                 break;
               }
               if (current.isAfter(cutoffDate)) instances.add({'doc': doc, 'date': current});
-              if (repeat == 'weekly') current = current.add(const Duration(days: 7));
-              else if (repeat == 'monthly') current = DateTime(current.year, current.month + 1, current.day);
+              if (repeat == 'weekly') {
+                current = current.add(const Duration(days: 7));
+              } else if (repeat == 'monthly') current = DateTime(current.year, current.month + 1, current.day);
               else if (repeat.startsWith('every_')) {
                 final days = int.tryParse(repeat.replaceFirst('every_', '')) ?? 1;
                 current = current.add(Duration(days: days));
@@ -215,7 +216,9 @@ class _DoggyScreenState extends State<DoggyScreen> {
           }
         }
 
-        for (var ref in toDelete) ref.delete();
+        for (var ref in toDelete) {
+          ref.delete();
+        }
 
         instances.sort((a, b) => (a['date'] as DateTime).compareTo(b['date'] as DateTime));
         return Column(

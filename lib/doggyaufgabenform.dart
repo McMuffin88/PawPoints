@@ -99,8 +99,8 @@ class DoggyTaskShopAddButton extends StatelessWidget {
     bool canBePurchased = task?['canBePurchased'] ?? true;
 
     // <--- AB HIER: IconKey statt IconData!
-    String selectedIconKey = isEditing && task?['icon'] != null && iconMap.containsKey(task?['icon'])
-        ? task!['icon']
+    String selectedIconKey = isEditing && task['icon'] != null && iconMap.containsKey(task['icon'])
+        ? task['icon']
         : availableIconKeys.first;
     // <--- BIS HIER
 
@@ -116,7 +116,7 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                 .orderBy('createdAt', descending: true)
                 .get();
             return snap.docs
-                .map((doc) => {'id': doc.id, ...doc.data() as Map<String, dynamic>})
+                .map((doc) => {'id': doc.id, ...doc.data()})
                 .toList();
           }
 

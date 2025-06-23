@@ -3,7 +3,7 @@ description: Eine App für Aufgaben und Belohnungssysteme für Doggys 🐶 und H
 
 publish_to: 'none' # Dieses Projekt soll nicht im pub.dev veröffentlicht werden
 
-version: 1.0.0+1
+version: 0.0.2+2
 
 environment:
   sdk: ">=3.1.0 <4.0.0"
@@ -13,6 +13,8 @@ dependencies:
     sdk: flutter
   crypto: ^3.0.3
   uuid: ^4.0.0
+  package_info_plus: ^8.3.0
+  url_launcher: ^6.1.7
   
 
 

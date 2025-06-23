@@ -214,8 +214,8 @@ class _MyDoggysScreenState extends State<MyDoggysScreen> {
             const SizedBox(height: 32),
 
             if (_doggys.isEmpty)
-              Column(
-                children: const [
+              const Column(
+                children: [
                   Icon(Icons.pets, size: 48, color: Colors.grey),
                   SizedBox(height: 12),
                   Text('Noch keine Doggys verknüpft.', style: TextStyle(fontSize: 16)),
@@ -289,13 +289,13 @@ class _MyDoggysScreenState extends State<MyDoggysScreen> {
             ],
 
             const SizedBox(height: 32),
-            Opacity(
+            const Opacity(
               opacity: 0.5,
               child: ListTile(
-                leading: const Icon(Icons.map),
-                title: const Text('Streuner in der Umgebung finden'),
-                subtitle: const Text('Premium-Inhalt – bald verfügbar'),
-                trailing: const Icon(Icons.lock),
+                leading: Icon(Icons.map),
+                title: Text('Streuner in der Umgebung finden'),
+                subtitle: Text('Premium-Inhalt – bald verfügbar'),
+                trailing: Icon(Icons.lock),
                 onTap: null,
               ),
             ),

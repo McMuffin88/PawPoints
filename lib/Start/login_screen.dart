@@ -40,7 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
           final prefs = await SharedPreferences.getInstance();
           final lastSent = prefs.getInt('last_verification_sent') ?? 0;
           final now = DateTime.now().millisecondsSinceEpoch;
-          final interval = Duration(hours: 12).inMilliseconds;
+          final interval = const Duration(hours: 12).inMilliseconds;
 
 
           if (now - lastSent > interval) {
