@@ -1,12 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'Settings/doggy_profile_screen.dart';
+import 'doggy_profile_screen.dart';
 import 'doggy_shop_screen.dart';
-import 'package:pawpoints/Settings/find_herrchen_screen.dart';
-import 'role_selection_screen.dart';
-import 'roadmap_screen.dart';
-
+import 'package:pawpoints/Drawer_Doggy/find_herrchen_screen.dart';
+import '../roadmap_screen.dart';
+import '../main.dart'; // Import main.dart
 
 Widget buildDoggyDrawer(BuildContext context) {
   final currentUser = FirebaseAuth.instance.currentUser;
@@ -90,17 +89,17 @@ Widget buildDoggyDrawer(BuildContext context) {
                     leading: const Icon(Icons.shopping_bag),
                     title: const Text('Tätigkeiten'),
                     children: [
-ListTile(
-  leading: const Icon(Icons.shop),
-  title: const Text('Shop'),
-  onTap: () {
-    Navigator.pop(context); // erst Drawer schließen
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const DoggyShopScreen()),
-    );
-  },
-),
+                      ListTile(
+                        leading: const Icon(Icons.shop),
+                        title: const Text('Shop'),
+                        onTap: () {
+                          Navigator.pop(context); // erst Drawer schließen
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const DoggyShopScreen()),
+                          );
+                        },
+                      ),
 
                     ],
                   ),
@@ -172,7 +171,7 @@ ListTile(
                   await FirebaseAuth.instance.signOut();
                   if (context.mounted) {
                     Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+                      MaterialPageRoute(builder: (_) => const PawPointsApp ()), // Changed to Mainscreen
                           (route) => false,
                     );
                   }

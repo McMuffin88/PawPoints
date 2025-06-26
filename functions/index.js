@@ -67,37 +67,57 @@ exports.onTaskCompleted = functions.firestore
     }
   });
 
-// -----------------------------------------
-// 2. Passwort zurücksetzen via Benutzername
-// -----------------------------------------
-exports.sendPasswordResetByUsername = functions.https.onCall(async (data, context) => {
-  const username = (data.username || '').trim().toLowerCase();
-  if (!username) {
-    throw new functions.https.HttpsError("invalid-argument", "Kein Benutzername angegeben.");
+// ANGEPASST: Passwort zurücksetzen via Benutzername ODER E-Mail
+exports.sendPasswordResetByUsernameOrEmail = functions.https.onCall(async (data, context) => {
+  const identifier = (data.identifier || '').trim(); // Kann Benutzername oder E-Mail sein
+
+  if (!identifier) {
+    throw new functions.https.HttpsError('invalid-argument', 'Identifier is required.');
   }
 
-  // E-Mail suchen (case-insensitive)
-  const userSnap = await admin.firestore()
-    .collection('users')
-    .where('username', '==', username)
-    .limit(1)
-    .get();
+  let emailToSendReset = null;
 
-  if (userSnap.empty) {
-    // Niemals verraten, ob ein Username existiert (Datenschutz)!
-    return { success: true, message: "Falls ein Account existiert, wurde eine Mail versendet." };
+  // 1. Prüfen, ob der Identifier eine gültige E-Mail-Adresse ist
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/;
+  if (emailRegex.test(identifier)) {
+    emailToSendReset = identifier; // Es ist eine E-Mail
+  } else {
+    // 2. Wenn es keine E-Mail ist, versuchen wir, es als Benutzernamen zu behandeln
+    // Suchen Sie in Ihrer Firestore-Datenbank nach dem Benutzer mit diesem Benutzernamen
+    try {
+      const usersRef = admin.firestore().collection('users');
+      // Verwenden Sie 'benutzername' wie in Ihrem Firestore-Schema
+      const querySnapshot = await usersRef.where('benutzername', '==', identifier).limit(1).get();
+
+      if (!querySnapshot.empty) {
+        emailToSendReset = querySnapshot.docs[0].data().email;
+      }
+    } catch (error) {
+      console.error("Error fetching user by username for password reset:", error);
+      // Ignoriere diesen Fehler für den Benutzer, um keine Informationen preiszugeben
+    }
   }
 
-  const email = userSnap.docs[0].get('email');
-
-  try {
-    await admin.auth().generatePasswordResetLink(email);
-    // (Firebase verschickt die Mail)
-  } catch (e) {
-    // Fehler ignorieren, immer gleiche Meldung zurückgeben!
+  // Wichtig: Geben Sie IMMER die gleiche Nachricht zurück,
+  // unabhängig davon, ob die E-Mail gefunden wurde oder nicht,
+  // um Benutzer-Enumeration zu verhindern.
+  if (emailToSendReset) {
+    try {
+      await admin.auth().sendPasswordResetEmail(emailToSendReset);
+      console.log(`Password reset email sent (or attempted) for identifier: ${identifier}`);
+    } catch (error) {
+      // Wenn das Senden der E-Mail fehlschlägt (z.B. ungültige E-Mail-Adresse bei Firebase Auth),
+      // protokollieren Sie es serverseitig, aber geben Sie dem Benutzer immer noch die generische Nachricht.
+      console.error(`Failed to send password reset email for ${emailToSendReset}:`, error);
+    }
+  } else {
+    // Wenn keine E-Mail gefunden wurde (weder direkte E-Mail noch über Benutzername),
+    // protokollieren Sie dies, aber geben Sie dem Benutzer die generische Nachricht.
+    console.log(`No email found for identifier: ${identifier}. Still sending generic success message.`);
   }
 
-  return { success: true, message: "Falls ein Account existiert, wurde eine Mail versendet." };
+  // Diese Nachricht wird IMMER an den Client gesendet, um User-Enumeration zu verhindern.
+  return { message: 'Wenn ein Account mit dieser Eingabe existiert, wurde eine E-Mail zum Zurücksetzen des Passworts gesendet.' };
 });
 
 // -----------------------------------------

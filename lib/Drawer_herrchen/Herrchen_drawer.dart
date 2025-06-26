@@ -3,13 +3,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:pawpoints/Settings/herrchen_notification.dart';
 
-import 'Settings/herrchen_profile_screen.dart';
-import 'Settings/mydoggys_screen.dart';
-import 'Settings/doggy_berechtigungen_screen.dart';
-import 'Settings/herrchen_shop_screen.dart';
-import 'Settings/premium_screen.dart';
-import 'role_selection_screen.dart';
-import 'roadmap_screen.dart';
+import 'herrchen_profile_screen.dart';
+import 'mydoggys_screen.dart';
+import 'doggy_berechtigungen_screen.dart';
+import 'herrchen_shop_screen.dart';
+import '../Settings/premium_screen.dart';
+import '../roadmap_screen.dart';
+import '../main.dart';
+
+import '../Start/bottom_navigator.dart';
 
 
 
@@ -201,7 +203,8 @@ Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImag
               await FirebaseAuth.instance.signOut();
               if (context.mounted) {
                 Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+                  // KORREKTUR: Navigiere zum LoginScreen (ersetze den Namen bei Bedarf)
+                  MaterialPageRoute(builder: (_) => const PawPointsApp ()),
                       (route) => false,
                 );
               }
