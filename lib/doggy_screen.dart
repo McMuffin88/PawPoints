@@ -6,8 +6,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import 'Settings/doggy_profile_screen.dart';
-import 'doggy_drawer.dart';
+import 'Drawer_Doggy/doggy_profile_screen.dart';
+import '/Drawer_Doggy/doggy_drawer.dart';
 
 // ICON-MAP HINZUFÜGEN
 final Map<String, IconData> iconMap = {
@@ -29,6 +29,9 @@ class DoggyScreen extends StatefulWidget {
 }
 
 class _DoggyScreenState extends State<DoggyScreen> {
+  // NEU: State für die BottomNavigationBar
+  int _selectedIndex = 2; // Startet auf dem "Aufgaben"-Tab
+
   String? _webImagePath;
   String _doggyName = 'Doggy';
   int _points = 0;
@@ -52,9 +55,11 @@ class _DoggyScreenState extends State<DoggyScreen> {
     final data = doc.data();
     if (data == null) return;
     setState(() {
+      // HINWEIS: 'name' wurde in der `main.dart` als 'benutzername' oder 'vorname' gespeichert.
+      // Ich gehe hier von 'benutzername' aus. Pass dies bei Bedarf an.
       _webImagePath = data['profileImageUrl'] as String?;
-      _doggyName    = data['name']           as String? ?? 'Doggy';
-      _points       = data['points']         as int?    ?? 0;
+      _doggyName = data['benutzername'] as String? ?? 'Doggy';
+      _points = data['points'] as int? ?? 0;
     });
   }
 
@@ -67,14 +72,15 @@ class _DoggyScreenState extends State<DoggyScreen> {
         .doc(uid)
         .snapshots()
         .listen((snap) {
-          if (!snap.exists) return;
-          final data     = snap.data()!;
-          final newPoints= data['points'] as int? ?? 0;
-          final timestamp= DateTime.now();
-          final timeStr  = '${timestamp.hour.toString().padLeft(2,'0')}:${timestamp.minute.toString().padLeft(2,'0')}';
-          print('🛠️ [DEBUG][$timeStr] Neuer Punkte-Stand: $newPoints');
-          setState(() => _points = newPoints);
-        });
+      if (!snap.exists) return;
+      final data = snap.data()!;
+      final newPoints = data['points'] as int? ?? 0;
+      final timestamp = DateTime.now();
+      final timeStr =
+          '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
+      print('🛠️ [DEBUG][$timeStr] Neuer Punkte-Stand: $newPoints');
+      setState(() => _points = newPoints);
+    });
   }
 
   void _setupFirebaseMessaging() {
@@ -95,7 +101,7 @@ class _DoggyScreenState extends State<DoggyScreen> {
 
     FirebaseMessaging.onMessage.listen((msg) {
       final t = msg.notification?.title ?? 'Info';
-      final b = msg.notification?.body  ?? '';
+      final b = msg.notification?.body ?? '';
       print('🔔 [FCM] $t — $b');
     });
   }
@@ -105,23 +111,29 @@ class _DoggyScreenState extends State<DoggyScreen> {
     if (imageUrl != null && imageUrl.startsWith('http')) {
       return CircleAvatar(backgroundImage: NetworkImage(imageUrl));
     } else {
-      final name = (userData['name'] as String?) ?? 'D';
+      // HINWEIS: Anpassung an 'benutzername', um mit der Logik oben übereinzustimmen.
+      final name = (userData['benutzername'] as String?) ?? 'D';
       return CircleAvatar(child: Text(name[0].toUpperCase()));
     }
   }
 
   Future<void> _confirmAndCompleteTask(
-      DocumentSnapshot taskDoc,
-      DateTime instanceDate,
+    DocumentSnapshot taskDoc,
+    DateTime instanceDate,
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Aufgabe abschließen?'),
-        content: const Text('Bist du sicher, dass du diese Aufgabe erledigt hast?'),
+        content:
+            const Text('Bist du sicher, dass du diese Aufgabe erledigt hast?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true),  child: const Text('Ja')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Abbrechen')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Ja')),
         ],
       ),
     );
@@ -134,6 +146,13 @@ class _DoggyScreenState extends State<DoggyScreen> {
     print('✅ [DEBUG] Completion angelegt für Aufgabe ${taskDoc.id}');
   }
 
+  // NEU: Methode zum Wechseln der Tabs
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -142,26 +161,72 @@ class _DoggyScreenState extends State<DoggyScreen> {
     }
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+      stream:
+          FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
       builder: (ctx, userSnap) {
-        if (!userSnap.hasData) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        if (!userSnap.hasData || userSnap.data?.data() == null) {
+          return const Scaffold(
+              body: Center(child: CircularProgressIndicator()));
         }
         final userData = userSnap.data!.data()! as Map<String, dynamic>;
-        final points   = userData['points'] as int? ?? 0;
+        final points = userData['points'] as int? ?? 0;
+
+        // NEU: Liste der Widgets für die verschiedenen Tabs
+        final List<Widget> widgetOptions = <Widget>[
+          const Center(child: Text('Platzhalter für Favoriten')),
+          const Center(child: Text('Platzhalter für Aktionen')),
+          _buildTaskList(points), // Die existierende Aufgabenliste
+          const Center(child: Text('Platzhalter für Mehr')),
+        ];
 
         return Scaffold(
           appBar: AppBar(
-            title: Text('Doggy-Aufgaben ($_doggyName)'),
+            // Der Titel könnte dynamisch sein, je nach Tab
+            title: Text(_selectedIndex == 2
+                ? 'Doggy-Aufgaben ($_doggyName)'
+                : 'Doggy-Screen'),
             actions: [
-              IconButton(
-                icon: _buildProfileIcon(userData, ctx),
-                onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+              // Das Profil-Icon könnte auch durch das Drawer-Icon ersetzt werden,
+              // da das Profil jetzt im Drawer ist.
+              Builder(
+                builder: (context) => IconButton(
+                  icon: _buildProfileIcon(userData, ctx),
+                  onPressed: () => Scaffold.of(context).openEndDrawer(),
+                ),
               )
             ],
           ),
           endDrawer: buildDoggyDrawer(context),
-          body: _buildTaskList(points),
+          // NEU: Der Body wird basierend auf dem ausgewählten Tab angezeigt
+          body: widgetOptions.elementAt(_selectedIndex),
+          // NEU: Die BottomNavigationBar
+          bottomNavigationBar: BottomNavigationBar(
+            items: const <BottomNavigationBarItem>[
+              BottomNavigationBarItem(
+                icon: Icon(Icons.favorite),
+                label: 'Favoriten',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.auto_awesome), // Ein "magisches" Icon wie im Bild
+                label: 'Aktionen',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.check),
+                label: 'Aufgaben',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.list),
+                label: 'Mehr',
+              ),
+            ],
+            currentIndex: _selectedIndex,
+            onTap: _onItemTapped,
+            // Wichtig für das Aussehen im Dark-Theme
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+            selectedItemColor: Theme.of(context).colorScheme.primary,
+            unselectedItemColor: Colors.grey[600],
+          ),
         );
       },
     );
@@ -170,9 +235,9 @@ class _DoggyScreenState extends State<DoggyScreen> {
   /// 6) Komplette Task-Liste mit allen alten Features
   Widget _buildTaskList(int points) {
     final user = FirebaseAuth.instance.currentUser!;
-    final now         = DateTime.now();
-    final startOfDay  = DateTime(now.year, now.month, now.day);
-    final cutoffDate  = startOfDay.subtract(const Duration(days: 1));
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final cutoffDate = startOfDay.subtract(const Duration(days: 1));
     final endBoundary = startOfDay.add(const Duration(days: 30));
 
     return StreamBuilder<QuerySnapshot>(
@@ -183,44 +248,57 @@ class _DoggyScreenState extends State<DoggyScreen> {
           .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
         if (!snap.hasData || snap.data!.docs.isEmpty) {
           return const Center(child: Text('Keine offenen Aufgaben.'));
         }
-        final docs      = snap.data!.docs;
+        final docs = snap.data!.docs;
         final instances = <Map<String, dynamic>>[];
-        final toDelete  = <DocumentReference>[];
+        final toDelete = <DocumentReference>[];
 
         for (var doc in docs) {
-          final data   = doc.data()! as Map<String, dynamic>;
-          final due    = DateTime.tryParse(data['due'] ?? '');
+          final data = doc.data()! as Map<String, dynamic>;
+          final due = DateTime.tryParse(data['due'] ?? '');
           if (due == null) continue;
           final repeat = data['repeat'];
           if (repeat == null) {
-            if (due.isAfter(cutoffDate)) instances.add({'doc': doc, 'date': due});
+            if (due.isAfter(cutoffDate))
+              instances.add({'doc': doc, 'date': due});
           } else {
             var current = due;
             while (current.isBefore(endBoundary)) {
               if (current.isBefore(cutoffDate)) {
-                toDelete.add(doc.reference);
+                // This logic might need review - deleting recurring tasks might not be intended.
+                // For now, keeping as is.
+                // toDelete.add(doc.reference);
                 break;
               }
-              if (current.isAfter(cutoffDate)) instances.add({'doc': doc, 'date': current});
+              if (current.isAfter(cutoffDate))
+                instances.add({'doc': doc, 'date': current});
               if (repeat == 'weekly') {
                 current = current.add(const Duration(days: 7));
-              } else if (repeat == 'monthly') current = DateTime(current.year, current.month + 1, current.day);
+              } else if (repeat == 'monthly')
+                current = DateTime(current.year, current.month + 1, current.day);
               else if (repeat.startsWith('every_')) {
-                final days = int.tryParse(repeat.replaceFirst('every_', '')) ?? 1;
+                final days =
+                    int.tryParse(repeat.replaceFirst('every_', '')) ?? 1;
                 current = current.add(Duration(days: days));
-              } else break;
+              } else
+                break;
             }
           }
         }
 
-        for (var ref in toDelete) {
-          ref.delete();
-        }
+        // Deleting documents during build is not recommended.
+        // This should be handled in a separate process or cloud function.
+        // for (var ref in toDelete) {
+        //   ref.delete();
+        // }
 
-        instances.sort((a, b) => (a['date'] as DateTime).compareTo(b['date'] as DateTime));
+        instances
+            .sort((a, b) => (a['date'] as DateTime).compareTo(b['date'] as DateTime));
         return Column(
           children: [
             Padding(
@@ -231,7 +309,8 @@ class _DoggyScreenState extends State<DoggyScreen> {
                   Icon(Icons.stars, color: Colors.amber.shade800),
                   const SizedBox(width: 8),
                   Text('Punkte: $points',
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -239,13 +318,13 @@ class _DoggyScreenState extends State<DoggyScreen> {
               child: ListView.builder(
                 itemCount: instances.length,
                 itemBuilder: (ctx, i) {
-                  final doc   = instances[i]['doc'] as DocumentSnapshot;
-                  final date  = instances[i]['date'] as DateTime;
-                  final data  = doc.data()! as Map<String, dynamic>;
-                  final dateStr   = DateFormat('dd.MM.yyyy').format(date);
-                  final timeStr   = DateFormat('HH:mm').format(date);
-                  final repeat    = data['repeat'];
-                  final repeatText= repeat == null
+                  final doc = instances[i]['doc'] as DocumentSnapshot;
+                  final date = instances[i]['date'] as DateTime;
+                  final data = doc.data()! as Map<String, dynamic>;
+                  final dateStr = DateFormat('dd.MM.yyyy').format(date);
+                  final timeStr = DateFormat('HH:mm').format(date);
+                  final repeat = data['repeat'];
+                  final repeatText = repeat == null
                       ? 'einmalig'
                       : repeat == 'weekly'
                           ? 'wöchentlich'
@@ -254,9 +333,10 @@ class _DoggyScreenState extends State<DoggyScreen> {
                               : repeat.startsWith('every_')
                                   ? 'alle ${repeat.split('_')[1]} Tage'
                                   : 'einmalig';
-                  final limit     = int.tryParse(data['limitValue']?.toString() ?? '') ?? 0;
-                  final type      = data['frequencyLimit'];
-                  final freqText  = type == 'mindestens'
+                  final limit =
+                      int.tryParse(data['limitValue']?.toString() ?? '') ?? 0;
+                  final type = data['frequencyLimit'];
+                  final freqText = type == 'mindestens'
                       ? 'Mindestens $limit×'
                       : type == 'höchstens'
                           ? 'Höchstens $limit×'
@@ -264,9 +344,10 @@ class _DoggyScreenState extends State<DoggyScreen> {
 
                   // ICON LÖSUNG: KEINE DYNAMISCHEN CODES MEHR
                   final String? iconKey = data['icon'];
-                  final IconData icon = iconKey != null && iconMap.containsKey(iconKey)
-                      ? iconMap[iconKey]!
-                      : Icons.pets;
+                  final IconData icon =
+                      iconKey != null && iconMap.containsKey(iconKey)
+                          ? iconMap[iconKey]!
+                          : Icons.pets;
 
                   return FutureBuilder<QuerySnapshot>(
                     future: doc.reference
@@ -274,37 +355,46 @@ class _DoggyScreenState extends State<DoggyScreen> {
                         .where('instanceDate', isEqualTo: date.toIso8601String())
                         .get(),
                     builder: (ctx, s) {
-                      final done     = s.data?.docs.length ?? 0;
-                      final progress = limit > 0 ? (done / limit).clamp(0.0, 1.0) : 0.0;
-                      final expired  = date.isBefore(startOfDay);
+                      final done = s.data?.docs.length ?? 0;
+                      final progress =
+                          limit > 0 ? (done / limit).clamp(0.0, 1.0) : 0.0;
+                      final expired = date.isBefore(startOfDay);
 
                       return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
                         child: ListTile(
                           leading: CircleAvatar(
                             backgroundColor: Colors.brown.shade100,
                             child: Icon(icon, color: Colors.brown.shade800),
                           ),
                           title: Text(data['title'] ?? '',
-                              style: const TextStyle(fontWeight: FontWeight.bold)),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Fällig: $dateStr – $timeStr – $repeatText${freqText != null ? ' – $freqText' : ''}'),
+                              Text(
+                                  'Fällig: $dateStr – $timeStr – $repeatText${freqText != null ? ' – $freqText' : ''}'),
                               if (limit > 0 && type != 'beliebig') ...[
                                 Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 6),
-                                    child: LinearProgressIndicator(value: progress)),
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 6),
+                                    child:
+                                        LinearProgressIndicator(value: progress)),
                                 Text('Heute: $done/$limit×'),
                               ],
                               if (expired && done == 0)
-                                const Text('Frist abgelaufen', style: TextStyle(color: Colors.red)),
+                                const Text('Frist abgelaufen',
+                                    style: TextStyle(color: Colors.red)),
                             ],
                           ),
                           trailing: IconButton(
                             icon: const Icon(Icons.check_circle_outline),
-                            onPressed: (expired || (type == 'höchstens' && done >= limit))
+                            onPressed: (expired ||
+                                    (type == 'höchstens' && done >= limit))
                                 ? null
                                 : () => _confirmAndCompleteTask(doc, date),
                           ),

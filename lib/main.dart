@@ -1,4 +1,10 @@
+// main.dart
+
 import 'dart:io';
+import 'dart:convert'; // Für utf8.encode
+import 'package:crypto/crypto.dart'; // Für SHA256 Hashing
+import 'dart:async'; // Für StreamController
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -9,11 +15,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher_string.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'firebase_options.dart';
 
+// Wichtig: Diese Dateien müssen in Ihrem Projekt existieren!
 import 'doggy_screen.dart';
 import 'herrchen_screen.dart';
+import 'Start/bottom_navigator.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,35 +35,83 @@ void main() async {
   runApp(const PawPointsApp());
 }
 
-class PawPointsApp extends StatelessWidget {
+
+
+// SHA256 Hashing Funktion
+String sha256hash(String input) {
+  var bytes = utf8.encode(input); // Daten, die gehasht werden
+  var digest = sha256.convert(bytes); // Verwende die sha256-Instanz aus dem crypto-Paket
+  return digest.toString();
+}
+
+// Globaler StreamController für Theme-Farben
+final _themeColorStreamController = StreamController<Color>.broadcast();
+
+class PawPointsApp extends StatefulWidget {
   const PawPointsApp({super.key});
+
+  // Methode, um auf den State zuzugreifen und die Farbe zu ändern
+  static _PawPointsAppState of(BuildContext context) =>
+      context.findAncestorStateOfType<_PawPointsAppState>()!;
+
+  @override
+  State<PawPointsApp> createState() => _PawPointsAppState();
+}
+
+class _PawPointsAppState extends State<PawPointsApp> {
+  Color _currentThemeColor = Colors.orange; // Standardfarbe
+
+  @override
+  void initState() {
+    super.initState();
+    // Höre auf Änderungen im Stream
+    _themeColorStreamController.stream.listen((color) {
+      if (mounted) {
+        setState(() {
+          _currentThemeColor = color;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _themeColorStreamController.close();
+    super.dispose();
+  }
+
+  // Methode, um die Farbe von außen zu setzen
+  void setThemeColor(Color newColor) {
+    _themeColorStreamController.add(newColor);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final orange = const Color(0xFFFF6F00);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'PawPoints',
       theme: ThemeData.dark(useMaterial3: true).copyWith(
         colorScheme: ColorScheme.dark(
-          primary: orange,
-          secondary: orange.shade700,
+          primary: _currentThemeColor, // Dynamische Primärfarbe
+          secondary: (_currentThemeColor as MaterialColor).shade700, // Korrektur hier
           onPrimary: Colors.black,
-          surface: const Color(0xFF121212),
+          surface: const Color(0xFF1E1E1E),
           onSurface: Colors.white70,
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.white10,
           border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(24),
-              borderSide: BorderSide.none),
+            borderRadius: BorderRadius.circular(24),
+            borderSide: BorderSide.none,
+          ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           hintStyle: const TextStyle(color: Colors.white54),
           labelStyle: const TextStyle(color: Colors.white70),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: orange,
+            backgroundColor: _currentThemeColor, // Dynamische Button-Farbe
             foregroundColor: Colors.black,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
@@ -65,7 +122,7 @@ class PawPointsApp extends StatelessWidget {
         ),
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
-            foregroundColor: orange,
+            foregroundColor: _currentThemeColor, // Dynamische TextButton-Farbe
             textStyle: const TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
@@ -90,27 +147,105 @@ class AuthWrapper extends StatefulWidget {
   State<AuthWrapper> createState() => _AuthWrapperState();
 }
 
-class _AuthWrapperState extends State<AuthWrapper> {
+class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
   bool showLogin = true;
   bool loading = false;
   User? _user;
   bool _showProfileForm = false;
   Map<String, dynamic>? _profileData;
   List<String> _missingFields = [];
+  bool _showPinVerification = false;
+  bool _pinVerified = false; // Zustand: true, wenn PIN einmal korrekt eingegeben wurde
 
+  // KORREKTUR: Diese Liste MUSS exakt den Firestore-Feldnamen entsprechen (Kleinschreibung).
   final List<String> requiredProfileFields = [
     'benutzername',
     'vorname',
+
     'nachname',
     'geburtsdatum',
     'gender',
     'roles',
   ];
 
+  // Mapping von Farbnamen zu Color-Objekten
+  final Map<String, Color> _colorOptions = {
+    'Orange': Colors.orange,
+    'Rot': Colors.red,
+    'Blau': Colors.blue,
+    'Grün': Colors.green,
+    'Lila': Colors.purple,
+    'Pink': Colors.pink,
+    'Türkis': Colors.teal,
+    // Fügen Sie hier bei Bedarf weitere Farben hinzu
+  };
+
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // Observer registrieren
     _checkAppVersion();
+    // Start listening to auth state changes to react to login/logout
+    FirebaseAuth.instance.authStateChanges().listen((User? user) async {
+      if (user != null) {
+        // User is logged in, proceed with _afterLogin checks
+        await _afterLogin(user);
+      } else {
+        // User is logged out, reset state to show login screen and default color
+        setState(() {
+          _user = null;
+          _profileData = null;
+          _showProfileForm = false;
+          _showPinVerification = false;
+          _pinVerified = false; // Reset PIN verification state on logout
+          showLogin = true;
+          loading = false;
+          PawPointsApp.of(context).setThemeColor(Colors.orange); // Standardfarbe wiederherstellen
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // Observer deregistrieren
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    print('App Lifecycle State: $state'); // Debug-Ausgabe hinzufügen
+
+    // Prüfe die Bedingungen nur, wenn ein Benutzer angemeldet ist und Profil geladen wurde
+    if (_user != null && _profileData != null && _profileData!['diskretModus'] == true) {
+      if (state == AppLifecycleState.resumed) {
+        // App kommt in den Vordergrund
+        // Wenn PIN noch NICHT verifiziert wurde (oder nach einem Hintergrund-Event zurückgesetzt wurde)
+        if (!_pinVerified) {
+          setState(() {
+            _showPinVerification = true;
+            showLogin = false; // Stellt sicher, dass Login/Registrierungsformulare ausgeblendet sind
+            _showProfileForm = false; // Stellt sicher, dass das Profilformular ausgeblendet ist
+            print('DEBUG: App Resumed, showing PIN verification.');
+          });
+        } else {
+          print('DEBUG: App Resumed, PIN already verified for this session.');
+        }
+      } else if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+        // App geht in den Hintergrund. Hier setzen wir _pinVerified IMMER zurück,
+        // damit beim nächsten resume die Abfrage kommt.
+        if (_pinVerified) { // Setze nur zurück, wenn es vorher verifiziert war
+          setState(() {
+            _pinVerified = false; // Wichtig: PIN-Status zurücksetzen!
+            print('DEBUG: App going to background, resetting PIN verification state.');
+          });
+        }
+      }
+    } else {
+      print('DEBUG: PIN check skipped. User: $_user, Profile: $_profileData, Diskretmodus: ${_profileData?['diskretModus']}, PinVerified: $_pinVerified');
+    }
   }
 
   Future<void> _checkAppVersion() async {
@@ -143,7 +278,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       builder: (ctx) => AlertDialog(
         title: const Text('Update verfügbar'),
         content: const Text(
-            'Eine neue Version der App ist verfügbar. Bitte aktualisiere, um alle Funktionen nutzen zu können.'),
+          'Eine neue Version der App ist verfügbar. Bitte aktualisiere, um alle Funktionen nutzen zu können.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
@@ -151,8 +287,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (await canLaunchUrlString(url)) {
-                await launchUrlString(url);
+              if (await canLaunchUrl(Uri.parse(url))) {
+                await launchUrl(Uri.parse(url));
               }
               Navigator.of(ctx).pop();
             },
@@ -166,17 +302,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void toggle() => setState(() => showLogin = !showLogin);
 
   Future<void> _afterLogin(User user) async {
+    if (!mounted) return;
     setState(() => loading = true);
-    await user.reload();
+    await user.reload(); // Ensure current user data is fresh
     final currentUser = FirebaseAuth.instance.currentUser;
+
     if (currentUser == null) {
+      if (!mounted) return;
       setState(() => loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Nutzer konnte nicht gefunden werden!')));
+        const SnackBar(content: Text('Nutzer konnte nicht gefunden werden!')),
+      );
       return;
     }
 
     if (!currentUser.emailVerified) {
+      if (!mounted) return;
       setState(() => loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -191,67 +332,186 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return;
     }
 
-    final userDoc =
-        await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
-    setState(() {
-      loading = false;
-      _user = currentUser;
-      _profileData = userDoc.data();
-    });
+    final userDocRef = FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
+    final userDoc = await userDocRef.get();
 
+    // WICHTIG: Erstelle das Dokument, falls es noch nicht existiert!
     if (!userDoc.exists) {
+      print('DEBUG: User document does not exist, creating default profile.');
+      await userDocRef.set({
+        'uid': currentUser.uid,
+        'email': currentUser.email,
+        'createdAt': FieldValue.serverTimestamp(),
+        // Initialisiere wichtige Felder mit Standardwerten
+        'benutzername': null,
+        'vorname': null,
+        'nachname': null,
+        'geburtsdatum': null,
+        'gender': null,
+        'roles': [],
+        'diskretModus': false, // Wichtig: Default auf false
+        'pinHash': '', // Wichtig: Default leer
+        'ageHidden': false,
+        'profileImageUrl': '',
+        'plz': null,
+        'city': null,
+        'doggyIds': [],
+        'herrchenIds': [],
+        'premium': {'doggy': false, 'herrchen': false},
+        'favoriteColor': 'Orange', // Standard-Lieblingsfarbe setzen
+      });
+      // Nach dem Erstellen das Dokument erneut laden, damit _profileData aktuell ist
+      final newUserDoc = await userDocRef.get();
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        _user = currentUser;
+        _profileData = newUserDoc.data(); // Jetzt mit den neu erstellten Daten
+      });
+      // Da es ein neues Profil ist, gehen wir direkt zum Profilformular
       _missingFields = List.from(requiredProfileFields);
       setState(() => _showProfileForm = true);
-      return;
+      return; // Beende hier und zeige das Profilformular an
+    } else {
+      // Bestehendes Profil laden
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        _user = currentUser;
+        _profileData = userDoc.data();
+      });
+
+      // Lieblingsfarbe anwenden, falls vorhanden
+      if (_profileData != null && _profileData!['favoriteColor'] != null) {
+        final String? favColorName = _profileData!['favoriteColor'] as String?;
+        if (favColorName != null && _colorOptions.containsKey(favColorName)) {
+          PawPointsApp.of(context).setThemeColor(_colorOptions[favColorName]!);
+        } else {
+          PawPointsApp.of(context).setThemeColor(Colors.orange); // Fallback auf Standardfarbe
+        }
+      }
     }
 
+    // PIN-Abfrage als erste Priorität, NACHDEM das Profil geladen/erstellt wurde
+    if (_profileData != null && _profileData!['diskretModus'] == true && _profileData!['pinHash'] != null && _profileData!['pinHash'].isNotEmpty && !_pinVerified) {
+      if (!mounted) return;
+      setState(() {
+        _showPinVerification = true;
+        showLogin = false; // Stellt sicher, dass Login/Registrierungsformulare ausgeblendet sind
+        _showProfileForm = false; // Stellt sicher, dass das Profilformular ausgeblendet ist
+      });
+      return; // Stoppe weitere Verarbeitung, zeige PIN-Bildschirm
+    }
+
+    // Wenn Profil unvollständig ist (oder nach oben neu erstellt wurde)
     _missingFields = [];
-    for (var field in requiredProfileFields) {
-      if (_profileData == null ||
-          !_profileData!.containsKey(field) ||
-          _profileData![field] == null ||
-          _profileData![field].toString().isEmpty) {
-        _missingFields.add(field);
+    if (_profileData != null) {
+      for (var field in requiredProfileFields) {
+        if (!_profileData!.containsKey(field) ||
+            _profileData![field] == null ||
+            (_profileData![field] is String && _profileData![field].toString().isEmpty) ||
+            (field == 'roles' && (_profileData![field] as List).isEmpty)) { // Spezifische Prüfung für leere Rollen
+          _missingFields.add(field);
+        }
       }
     }
 
     if (_missingFields.isNotEmpty) {
+      if (!mounted) return;
       setState(() => _showProfileForm = true);
       return;
     }
 
+    // Wenn alles okay ist (keine PIN, kein unvollständiges Profil), leite zur Rolle weiter
     final roles = List<String>.from(_profileData?['roles'] ?? []);
     if (roles.contains('doggy')) {
+      if (!mounted) return;
       Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (_) => const DoggyScreen()));
+          context, MaterialPageRoute(builder: (_) => BottomNavigator(role: "doggy")));
     } else if (roles.contains('herrchen')) {
+      if (!mounted) return;
       Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (_) => const HerrchenScreen()));
+          context, MaterialPageRoute(builder: (_) => BottomNavigator(role: "herrchen")));
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Bitte wähle im Profil mindestens eine Rolle aus!')));
-      setState(() => _showProfileForm = true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bitte wähle im Profil mindestens eine Rolle aus!')),
+      );
+      setState(() => _showProfileForm = true); // Go back to profile to select role
     }
   }
 
   void _onProfileSaved() {
+    if (!mounted) return;
     setState(() {
       _showProfileForm = false;
       _missingFields = [];
     });
-    if (_profileData == null) return;
-    final roles = List<String>.from(_profileData?['roles'] ?? []);
-    if (roles.contains('doggy')) {
-      Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (_) => const DoggyScreen()));
-    } else if (roles.contains('herrchen')) {
-      Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (_) => const HerrchenScreen()));
+    // After profile is saved, re-evaluate the next step (e.g., check PIN or navigate to role screen)
+    if (_user != null) {
+      _afterLogin(_user!); // Re-run the logic to determine where to go next
+    }
+  }
+
+  void _onPinVerified(bool verified) async {
+    if (!mounted) return;
+    setState(() {
+      _showPinVerification = false;
+      _pinVerified = verified; // Setze den Verifizierungsstatus
+    });
+
+    if (verified) {
+      // If PIN is correct, navigate based on roles
+      final roles = List<String>.from(_profileData?['roles'] ?? []);
+      if (roles.contains('doggy')) {
+        if (!mounted) return;
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => BottomNavigator(role: "doggy")));;
+      } else if (roles.contains('herrchen')) {
+        if (!mounted) return;
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => BottomNavigator(role: "herrchen")));
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bitte wähle im Profil mindestens eine Rolle aus!')),
+        );
+        setState(() => _showProfileForm = true);
+      }
+    } else {
+      // If PIN is incorrect, log out the user
+      await FirebaseAuth.instance.signOut();
+      if (!mounted) return;
+      setState(() {
+        _user = null;
+        _showProfileForm = false;
+        showLogin = true; // Go back to login
+        _pinVerified = false; // Reset for security
+        PawPointsApp.of(context).setThemeColor(Colors.orange); // Standardfarbe wiederherstellen
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Falsche PIN. Bitte erneut anmelden.')),
+      );
     }
   }
 
   Future<bool> _onWillPop() async {
-    if (!Platform.isAndroid) return true;
+    if (_showPinVerification) {
+      // When on PIN verification screen, pressing back logs out
+      await FirebaseAuth.instance.signOut();
+      if (!mounted) return false;
+      setState(() {
+        _user = null;
+        _showProfileForm = false;
+        showLogin = true;
+        _showPinVerification = false;
+        _pinVerified = false; // Reset for security
+        PawPointsApp.of(context).setThemeColor(Colors.orange); // Standardfarbe wiederherstellen
+      });
+      return false; // Prevent closing the app
+    }
+    // Default back button behavior (e.g., app exit confirmation on Android)
+    if (!Platform.isAndroid) return true; // Allow closing on other platforms
     final shouldExit = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -278,48 +538,200 @@ class _AuthWrapperState extends State<AuthWrapper> {
       child: loading
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : Scaffold(
-              body: Center(
+              extendBodyBehindAppBar: true,
+              backgroundColor: const Color(0xFF1E1E1E),
+              body: MediaQuery.removePadding(
+                context: context,
+                removeTop: true,
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      // HEADER IMAGE
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: Image.asset(
-                          'assets/login_header.jpg',
-                          width: double.infinity,
-                          height: 180,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // LOGIN or REGISTER form
-                      if (_showProfileForm && _user != null)
+                      // 1. Check for PIN Verification first
+                      if (_showPinVerification && _user != null && _profileData != null)
+                        PinVerificationScreen(
+                          storedPinHash: _profileData!['pinHash'],
+                          onVerified: _onPinVerified,
+                        )
+                      // 2. Then check for Profile Form
+                      else if (_showProfileForm && _user != null)
                         ProfileForm(
                           user: _user!,
-                          onSaved: () async {
-                            final doc = await FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(_user!.uid)
-                                .get();
-                            _profileData = doc.data();
-                            _onProfileSaved();
-                          },
+                          onSaved: _onProfileSaved, // Calls _onProfileSaved, which re-evaluates
                           missingFields: _missingFields,
                           requiredFields: requiredProfileFields,
+                          colorOptions: _colorOptions, // Übergabe der Farboptionen
                         )
+                      // 3. Finally, show Login/Register forms
                       else if (showLogin)
                         LoginForm(onSwitch: toggle, onSuccess: _afterLogin)
                       else
                         RegisterForm(onSwitch: toggle),
+                      // If none of the above, it implies the user is authenticated, has a complete profile,
+                      // and is not in discrete mode (or PIN was verified), so the role-based navigation
+                      // within _afterLogin would have taken over.
                     ],
                   ),
                 ),
               ),
             ),
+    );
+  }
+}
+
+// Neues Widget für die PIN-Verifizierung
+class PinVerificationScreen extends StatefulWidget {
+  final String storedPinHash;
+  final Function(bool) onVerified;
+
+  const PinVerificationScreen({
+    super.key,
+    required this.storedPinHash,
+    required this.onVerified,
+  });
+
+  @override
+  State<PinVerificationScreen> createState() => _PinVerificationScreenState();
+}
+
+class _PinVerificationScreenState extends State<PinVerificationScreen> {
+  final _pinController = TextEditingController();
+  final FocusNode _pinFocusNode = FocusNode(); // Neuer FocusNode
+  bool _loading = false;
+  String _errorMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    // Automatisch das Textfeld fokussieren, sobald das Widget gerendert wird
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pinFocusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pinController.dispose();
+    _pinFocusNode.dispose(); // FocusNode dispoen
+    super.dispose();
+  }
+
+  void _verifyPin() {
+    setState(() {
+      _loading = true;
+      _errorMessage = '';
+    });
+
+    final enteredPinHash = sha256hash(_pinController.text.trim());
+
+    // DEBUG Prints (optional, kann nach erfolgreicher Fehlerbehebung entfernt werden)
+    print('DEBUG: Entered PIN Hash: $enteredPinHash');
+    print('DEBUG: Stored PIN Hash: ${widget.storedPinHash}');
+
+    if (enteredPinHash == widget.storedPinHash) {
+      widget.onVerified(true);
+    } else {
+      setState(() {
+        _errorMessage = 'Falsche PIN. Bitte erneut versuchen.';
+        _loading = false;
+      });
+      _pinController.clear();
+      _pinFocusNode.requestFocus(); // Fokus nach falscher Eingabe wiederherstellen
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Um die Höhe des Bildschirms zu erhalten, ähnlich wie in LoginForm
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // Optional: Wenn du ein Header-Bild wie im Login-Screen möchtest
+          // ClipRRect(
+          //   borderRadius: const BorderRadius.only(
+          //     bottomRight: Radius.circular(80),
+          //   ),
+          //   child: Image.asset(
+          //     'assets/login_header.png', // Annahme: Du hast dieses Asset
+          //     width: MediaQuery.of(context).size.width,
+          //     height: screenHeight * 0.35, // Anpassbare Höhe
+          //     fit: BoxFit.cover,
+          //   ),
+          // ),
+          SizedBox(height: screenHeight * 0.2), // Angepasster Abstand von oben
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Card(
+              color: const Color(0xFF1C1C1C),
+              elevation: 12,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'PIN-Eingabe erforderlich',
+                      style: TextStyle(
+                          fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: _pinController,
+                      focusNode: _pinFocusNode, // FocusNode zuweisen
+                      obscureText: true,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        labelText: 'PIN',
+                        hintText: 'Bitte gib deine 6-stellige PIN ein',
+                        prefixIcon: Icon(Icons.lock, color: Colors.white70),
+                      ),
+                      onSubmitted: (_) => _verifyPin(), // PIN verifizieren bei "Enter"
+                    ),
+                    if (_errorMessage.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text(
+                          _errorMessage,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _loading ? null : _verifyPin,
+                        child: _loading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  color: Colors.black,
+                                ),
+                              )
+                            : const Text('Bestätigen'),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextButton(
+                      onPressed: _loading ? null : () {
+                        // Benutzer abmelden, wenn PIN vergessen
+                        widget.onVerified(false);
+                      },
+                      child: const Text('PIN vergessen? Abmelden'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -340,47 +752,60 @@ class _LoginFormState extends State<LoginForm> {
   bool _rememberMe = false;
 
   Future<String> _getEmailFromLogin(String input) async {
-    final emailRegex = RegExp(r"^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$");
+    // Basic email regex check, more robust validation is done server-side by Firebase Auth
+    final emailRegex = RegExp(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$");
     if (emailRegex.hasMatch(input.trim())) {
-      return input.trim(); // Email direkt
+      return input.trim(); // It's an email
     } else {
-      // Benutzername -> Email via Cloud Function
+      // Assume it's a username, try to convert via Cloud Function
       try {
         final result = await FirebaseFunctions.instance
-            .httpsCallable('usernameToEmail')
+            .httpsCallable('usernameToEmail') // This Cloud Function needs to exist!
             .call({'username': _loginInput.text.trim()});
+        if (result.data == null || result.data['email'] == null) {
+          throw Exception('Benutzername nicht gefunden oder keine E-Mail verknüpft');
+        }
         return result.data['email'] as String;
+      } on FirebaseFunctionsException catch (e) {
+        // Handle specific Cloud Function errors if needed, but for security,
+        // it's better to give a generic message to the user.
+        print('Cloud Function usernameToEmail error: ${e.code} - ${e.message}');
+        // Re-throw as a generic error to be caught by the outer catch block
+        throw Exception('Fehler beim Abrufen der E-Mail für Benutzername.');
       } catch (e) {
-        throw Exception('Benutzername nicht gefunden');
+        print('Unerwarteter Fehler bei usernameToEmail: $e');
+        throw Exception('Fehler beim Abrufen der E-Mail für Benutzername.');
       }
     }
   }
 
   void _login() async {
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       final email = await _getEmailFromLogin(_loginInput.text);
-      if (_rememberMe) {
-        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
-      } else {
-        await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
+      if (kIsWeb) {
+        if (_rememberMe) {
+          await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+        } else {
+          await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
+        }
       }
       final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: email, password: _pw.text.trim());
       await widget.onSuccess(cred.user!);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _loading = false);
-      String msg = 'Fehler beim Login: $e';
+      String msg = 'Fehler beim Login.';
       if (e is FirebaseAuthException) {
         switch (e.code) {
           case 'user-not-found':
-            msg = 'Kein Nutzer mit dieser E-Mail gefunden!';
+          case 'invalid-email':
+            msg = 'E-Mail/Benutzername oder Passwort falsch.'; // Generic message for security
             break;
           case 'wrong-password':
-            msg = 'Falsches Passwort!';
-            break;
-          case 'invalid-email':
-            msg = 'Bitte gib eine gültige E-Mail-Adresse ein.';
+            msg = 'E-Mail/Benutzername oder Passwort falsch.'; // Generic message for security
             break;
           case 'user-disabled':
             msg = 'Dieser Nutzer wurde deaktiviert.';
@@ -388,104 +813,224 @@ class _LoginFormState extends State<LoginForm> {
           case 'too-many-requests':
             msg = 'Zu viele Anmeldeversuche. Bitte später versuchen.';
             break;
+          default:
+            msg = 'Anmeldefehler: ${e.message}';
+            break;
         }
+      } else if (e.toString().contains('Benutzername nicht gefunden') || e.toString().contains('Fehler beim Abrufen der E-Mail für Benutzername')) {
+        msg = 'E-Mail/Benutzername oder Passwort falsch.'; // Generic message for security
+      } else {
+        msg = 'Ein unerwarteter Fehler ist aufgetreten: $e';
       }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
+    if (!mounted) return;
     setState(() => _loading = false);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFF1C1C1C),
-      elevation: 12,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Willkommen zurück',
-              style: TextStyle(
-                  fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+  // MARK: - Passwort vergessen Funktion (Serverless-Ansatz)
+  void _showForgotPasswordDialog() async {
+    final inputController = TextEditingController(text: _loginInput.text.trim());
+
+    final enteredValue = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Passwort zurücksetzen'),
+          content: TextField(
+            controller: inputController,
+            decoration: const InputDecoration(
+              labelText: 'Benutzername oder E-Mail',
+              hintText: 'Gib deinen registrierten Benutzernamen oder E-Mail ein',
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Melde dich mit Benutzername oder E-Mail an',
-              style: TextStyle(color: Colors.white70),
+            keyboardType: TextInputType.text, // Kann Text oder E-Mail sein
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Abbrechen'),
             ),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _loginInput,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.person, color: Colors.white70),
-                labelText: 'Benutzername oder E-Mail',
-                labelStyle: TextStyle(color: Colors.white70),
-              ),
-            ),
-            const SizedBox(height: 18),
-            TextField(
-              controller: _pw,
-              style: const TextStyle(color: Colors.white),
-              obscureText: !_pwVisible,
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.lock, color: Colors.white70),
-                labelText: 'Passwort',
-                labelStyle: const TextStyle(color: Colors.white70),
-                suffixIcon: IconButton(
-                    icon: Icon(
-                      _pwVisible ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.white70,
-                    ),
-                    onPressed: () => setState(() => _pwVisible = !_pwVisible)),
-              ),
-            ),
-            Row(
-              children: [
-                Checkbox(
-                    value: _rememberMe,
-                    fillColor: MaterialStateProperty.all(const Color(0xFFFF6F00)),
-                    checkColor: Colors.black,
-                    onChanged: (v) => setState(() => _rememberMe = v ?? false)),
-                const Text(
-                  'Angemeldet bleiben',
-                  style: TextStyle(color: Colors.white70),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _loading ? null : _login,
-                child: _loading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 3,
-                          color: Colors.black,
-                        ),
-                      )
-                    : const Text('Anmelden'),
-              ),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  "Noch keinen Account? ",
-                  style: TextStyle(color: Colors.white70),
-                ),
-                TextButton(onPressed: widget.onSwitch, child: const Text("Registrieren"))
-              ],
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(ctx).pop(inputController.text.trim());
+              },
+              child: const Text('Senden'),
             ),
           ],
-        ),
+        );
+      },
+    );
+
+    if (enteredValue == null || enteredValue.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Eingabe wurde nicht gemacht.')),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      // Aufruf der Cloud Function 'sendPasswordResetByUsernameOrEmail'
+      // Diese Funktion muss die Logik enthalten, um zu erkennen, ob es eine E-Mail oder ein Benutzername ist,
+      // die entsprechende E-Mail-Adresse zu finden und dann die Reset-E-Mail zu senden.
+      await FirebaseFunctions.instance
+          .httpsCallable('sendPasswordResetByUsernameOrEmail')
+          .call({'identifier': enteredValue}); // 'identifier' kann Benutzername oder E-Mail sein
+
+      // Die Cloud Function gibt immer die gleiche Nachricht zurück, um User Enumeration zu verhindern.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Wenn ein Account mit dieser Eingabe existiert, wurde eine E-Mail zum Zurücksetzen des Passworts gesendet.')),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      // Auch hier die gleiche generische Nachricht für den Benutzer
+      print('Cloud Function Error (Password Reset): ${e.code} - ${e.message}'); // Für Debugging im Log
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Beim Zurücksetzen des Passworts ist ein Fehler aufgetreten. Bitte versuche es später erneut.')),
+      );
+    } catch (e) {
+      print('Unerwarteter Fehler (Password Reset): $e'); // Für Debugging im Log
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es später erneut.')),
+      );
+    }
+    if (!mounted) return;
+    setState(() => _loading = false);
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.only(
+              bottomRight: Radius.circular(80),
+            ),
+            child: Image.asset(
+              'assets/login_header.png',
+              width: MediaQuery.of(context).size.width,
+              height: screenHeight * 0.35,
+              fit: BoxFit.cover,
+            ),
+          ),
+          const SizedBox(height: 40),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Card(
+              color: const Color(0xFF1C1C1C),
+              elevation: 12,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.7,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: const Text(
+                          'Willkommen bei PawPoints',
+                          style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
+                          maxLines: 1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: _loginInput,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.person, color: Colors.white70),
+                        labelText: 'Benutzername oder E-Mail',
+                        labelStyle: TextStyle(color: Colors.white70),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    TextField(
+                      controller: _pw,
+                      style: const TextStyle(color: Colors.white),
+                      obscureText: !_pwVisible,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.lock, color: Colors.white70),
+                        labelText: 'Passwort',
+                        labelStyle: const TextStyle(color: Colors.white70),
+                        suffixIcon: IconButton(
+                            icon: Icon(
+                              _pwVisible ? Icons.visibility : Icons.visibility_off,
+                              color: Colors.white70,
+                            ),
+                            onPressed: () => setState(() => _pwVisible = !_pwVisible)),
+                      ),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        if (kIsWeb)
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: _rememberMe,
+                                fillColor: MaterialStateProperty.all(Theme.of(context).colorScheme.primary),
+                                checkColor: Colors.black,
+                                onChanged: (v) => setState(() => _rememberMe = v ?? false),
+                              ),
+                              const Text(
+                                'Angemeldet bleiben',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                            ],
+                          ),
+                        // Changed to call the dialog function
+                        TextButton(
+                          onPressed: _loading ? null : _showForgotPasswordDialog,
+                          child: const Text('Passwort vergessen?'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _loading ? null : _login,
+                        child: _loading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  color: Colors.black,
+                                ),
+                              )
+                            : const Text('Anmelden'),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          "Noch keinen Account? ",
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                        TextButton(onPressed: widget.onSwitch, child: const Text("Registrieren"))
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -501,536 +1046,739 @@ class RegisterForm extends StatefulWidget {
 class _RegisterFormState extends State<RegisterForm> {
   final _email = TextEditingController();
   final _pw = TextEditingController();
+  final _confirmPw = TextEditingController(); // Neues Textfeld für Passwort-Wiederholung
   bool _pwVisible = false;
+  bool _confirmPwVisible = false; // Für Sichtbarkeit des zweiten Passwortfelds
   bool _loading = false;
+  String? _passwordStrengthText;
+  Color? _passwordStrengthColor;
+
+  // MARK: - Passwortstärke-Einschätzung
+  void _checkPasswordStrength(String password) {
+    int score = 0;
+    if (password.length < 6) {
+      _passwordStrengthText = "Sehr schwach (min. 6 Zeichen)";
+      _passwordStrengthColor = Colors.red;
+    } else {
+      score++; // Länge > 6
+
+      if (password.length >= 8) score++; // Länger als 8 Zeichen
+      if (RegExp(r'[A-Z]').hasMatch(password)) score++; // Großbuchstaben
+      if (RegExp(r'[a-z]').hasMatch(password)) score++; // Kleinbuchstaben
+      if (RegExp(r'\d').hasMatch(password)) score++; // Zahlen
+      if (RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(password)) score++; // Sonderzeichen
+
+      if (score < 3) {
+        _passwordStrengthText = "Schwach";
+        _passwordStrengthColor = Colors.orange;
+      } else if (score < 5) {
+        _passwordStrengthText = "Mittel";
+        _passwordStrengthColor = Colors.yellow;
+      } else {
+        _passwordStrengthText = "Stark";
+        _passwordStrengthColor = Colors.green;
+      }
+    }
+    setState(() {}); // UI aktualisieren
+  }
 
   void _register() async {
     setState(() => _loading = true);
-    try {
-      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _email.text.trim(), password: _pw.text.trim());
-      await cred.user?.sendEmailVerification();
 
+    if (_pw.text.trim() != _confirmPw.text.trim()) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:
-            Text('Registrierung erfolgreich! Bitte bestätige deine E-Mail-Adresse.'),
-        duration: Duration(seconds: 6),
+        content: Text('Passwörter stimmen nicht überein!'),
       ));
-      widget.onSwitch();
+      setState(() => _loading = false);
+      return;
+    }
+
+    if (_passwordStrengthColor == Colors.red || _passwordStrengthText == "Sehr schwach (min. 6 Zeichen)") {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Bitte wähle ein stärkeres Passwort (mindestens 6 Zeichen).'),
+      ));
+      setState(() => _loading = false);
+      return;
+    }
+
+    try {
+      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: _email.text.trim(), password: _pw.text.trim());
+      await credential.user!.sendEmailVerification();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Registrierung erfolgreich! Bitte bestätige deine E-Mail-Adresse und melde dich dann an.')),
+      );
+      widget.onSwitch(); // Zurück zum Login-Formular
     } on FirebaseAuthException catch (e) {
-      String msg;
-      switch (e.code) {
-        case 'email-already-in-use':
-          msg = 'Diese E-Mail ist bereits vergeben!';
-          break;
-        case 'invalid-email':
-          msg = 'Bitte gib eine gültige E-Mail-Adresse ein.';
-          break;
-        case 'weak-password':
-          msg = 'Das Passwort ist zu schwach. Es muss mindestens 6 Zeichen lang sein.';
-          break;
-        case 'operation-not-allowed':
-          msg = 'Registrierung ist momentan nicht erlaubt.';
-          break;
-        default:
-          msg = 'Fehler: ${e.message ?? e.code}';
+      String msg = 'Fehler bei der Registrierung.';
+      if (e.code == 'weak-password') {
+        msg = 'Das Passwort ist zu schwach.';
+      } else if (e.code == 'email-already-in-use') {
+        msg = 'Diese E-Mail-Adresse ist bereits registriert.';
+      } else if (e.code == 'invalid-email') {
+        msg = 'Die E-Mail-Adresse ist ungültig.';
       }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Unbekannter Fehler: $e')));
+          .showSnackBar(SnackBar(content: Text('Ein Fehler ist aufgetreten: $e')));
     }
+    if (!mounted) return;
     setState(() => _loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFF1C1C1C),
-      elevation: 12,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 28),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text(
-            'Registrieren',
-            style: TextStyle(
-                fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _email,
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-              labelText: "E-Mail",
-              labelStyle: TextStyle(color: Colors.white70),
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.only(
+              bottomRight: Radius.circular(80),
+            ),
+            child: Image.asset(
+              'assets/login_header.png',
+              width: MediaQuery.of(context).size.width,
+              height: screenHeight * 0.35,
+              fit: BoxFit.cover,
             ),
           ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _pw,
-            style: const TextStyle(color: Colors.white),
-            obscureText: !_pwVisible,
-            decoration: InputDecoration(
-              labelText: 'Passwort',
-              labelStyle: const TextStyle(color: Colors.white70),
-              suffixIcon: IconButton(
-                  icon: Icon(
-                      _pwVisible ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.white70),
-                  onPressed: () => setState(() => _pwVisible = !_pwVisible)),
-            ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _loading ? null : _register,
-              child: _loading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: Colors.black,
+          const SizedBox(height: 40),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Card(
+              color: const Color(0xFF1C1C1C),
+              elevation: 12,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.7,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: const Text(
+                          'Registrieren',
+                          style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
+                          maxLines: 1,
+                        ),
                       ),
-                    )
-                  : const Text("Registrieren"),
+                    ),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: _email,
+                      style: const TextStyle(color: Colors.white),
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.email, color: Colors.white70),
+                        labelText: 'E-Mail',
+                        labelStyle: TextStyle(color: Colors.white70),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    TextField(
+                      controller: _pw,
+                      style: const TextStyle(color: Colors.white),
+                      obscureText: !_pwVisible,
+                      onChanged: _checkPasswordStrength, // Passwortstärke prüfen
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.lock, color: Colors.white70),
+                        labelText: 'Passwort',
+                        labelStyle: const TextStyle(color: Colors.white70),
+                        suffixIcon: IconButton(
+                            icon: Icon(
+                              _pwVisible ? Icons.visibility : Icons.visibility_off,
+                              color: Colors.white70,
+                            ),
+                            onPressed: () => setState(() => _pwVisible = !_pwVisible)),
+                      ),
+                    ),
+                    // Anzeige der Passwortstärke
+                    if (_passwordStrengthText != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 8.0, left: 12.0),
+                          child: Text(
+                            'Stärke: $_passwordStrengthText',
+                            style: TextStyle(
+                              color: _passwordStrengthColor,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 18),
+                    TextField(
+                      controller: _confirmPw, // Zweites Passwortfeld
+                      style: const TextStyle(color: Colors.white),
+                      obscureText: !_confirmPwVisible,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.lock_reset, color: Colors.white70),
+                        labelText: 'Passwort wiederholen',
+                        labelStyle: const TextStyle(color: Colors.white70),
+                        suffixIcon: IconButton(
+                            icon: Icon(
+                              _confirmPwVisible ? Icons.visibility : Icons.visibility_off,
+                              color: Colors.white70,
+                            ),
+                            onPressed: () => setState(() => _confirmPwVisible = !_confirmPwVisible)),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _loading ? null : _register,
+                        child: _loading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  color: Colors.black,
+                                ),
+                              )
+                            : const Text('Registrieren'),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          "Bereits einen Account? ",
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                        TextButton(onPressed: widget.onSwitch, child: const Text("Anmelden"))
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 14),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            const Text(
-              "Schon registriert? ",
-              style: TextStyle(color: Colors.white70),
-            ),
-            TextButton(onPressed: widget.onSwitch, child: const Text("Anmelden"))
-          ]),
-        ]),
+        ],
       ),
     );
   }
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _pw.dispose();
+    _confirmPw.dispose(); // Wichtig: Auch diesen Controller entsorgen!
+    super.dispose();
+  }
 }
 
-// ---- PROFILE FORM (mit Profilbild, Tooltips etc.) ----
+
 class ProfileForm extends StatefulWidget {
   final User user;
   final VoidCallback onSaved;
   final List<String> missingFields;
   final List<String> requiredFields;
+  final Map<String, Color> colorOptions; // Neue Property für Farboptionen
 
-  const ProfileForm(
-      {super.key,
-      required this.user,
-      required this.onSaved,
-      required this.missingFields,
-      required this.requiredFields});
+  const ProfileForm({
+    super.key,
+    required this.user,
+    required this.onSaved,
+    required this.missingFields,
+    required this.requiredFields,
+    required this.colorOptions, // Initialisierung im Konstruktor
+  });
 
   @override
   State<ProfileForm> createState() => _ProfileFormState();
 }
 
 class _ProfileFormState extends State<ProfileForm> {
-  final _benutzername = TextEditingController();
-  final _vorname = TextEditingController();
-  final _nachname = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _benutzernameController = TextEditingController();
+  final TextEditingController _vornameController = TextEditingController();
+  final TextEditingController _nachnameController = TextEditingController();
+  final TextEditingController _plzController = TextEditingController();
+  final TextEditingController _cityController = TextEditingController();
+  final TextEditingController _pinController = TextEditingController();
   DateTime? _geburtsdatum;
-  String _gender = 'männlich';
-  final List<String> _roles = [];
-  final _plz = TextEditingController();
-  final _city = TextEditingController();
+  String? _selectedGender;
+  bool _doggyRole = false;
+  bool _herrchenRole = false;
   bool _diskretModus = false;
-  final _pin = TextEditingController();
-  bool _loading = false;
   bool _ageHidden = false;
   String? _profileImageUrl;
+  bool _loading = false;
+  String? _selectedFavoriteColor; // Neues Feld für die Lieblingsfarbe
+
+  // NEU: Map zur Übersetzung von Firestore-Keys in lesbare Namen für die UI.
+  final Map<String, String> _fieldDisplayNames = {
+    'benutzername': 'Benutzername',
+    'vorname': 'Vorname',
+    'nachname': 'Nachname',
+    'geburtsdatum': 'Geburtsdatum',
+    'gender': 'Geschlecht',
+    'roles': 'Rolle'
+  };
 
   @override
   void initState() {
     super.initState();
-    // Falls gewünscht, lade hier Profildaten vor (z.B. aus widget.missingFields)
+    _loadProfileData();
   }
 
-  Future<void> _pickProfileImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile == null) return;
-
-    final user = widget.user;
-    final ref = FirebaseStorage.instance
-        .ref()
-        .child('profile_images/${user.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-    String url;
-    if (kIsWeb) {
-      final bytes = await pickedFile.readAsBytes();
-      await ref.putData(bytes);
-      url = await ref.getDownloadURL();
-    } else {
-      final file = File(pickedFile.path);
-      await ref.putFile(file);
-      url = await ref.getDownloadURL();
-    }
-
-    setState(() => _profileImageUrl = url);
-  }
-
-  Future<void> _pickGeburtsdatum(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(DateTime.now().year - 18),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-      locale: const Locale('de', ''),
-    );
-    if (picked != null) setState(() => _geburtsdatum = picked);
-  }
-
-  int _calculateAge(DateTime birthDate) {
-    final now = DateTime.now();
-    int age = now.year - birthDate.year;
-    if (now.month < birthDate.month ||
-        (now.month == birthDate.month && now.day < birthDate.day)) {
-      age--;
-    }
-    return age;
-  }
-
-  Widget infoIcon(String message) => Tooltip(
-        message: message,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 6.0),
-          child: Icon(Icons.info_outline, size: 18, color: Colors.grey),
-        ),
-      );
-
-  void _showMissingFieldsHint() {
-    final buffer = StringBuffer();
-    buffer.writeln('Folgende Felder fehlen:');
-    for (final field in widget.missingFields) {
-      buffer.writeln('- $field');
-    }
-    buffer.writeln(
-        '\nAb Version XX werden diese Daten für eine bessere Nutzererfahrung benötigt.');
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Profil unvollständig'),
-        content: Text(buffer.toString()),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context), child: const Text('OK')),
-        ],
-      ),
-    );
-  }
-
-  void _saveProfile() async {
+  Future<void> _loadProfileData() async {
     setState(() => _loading = true);
+    final doc = await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).get();
+    final data = doc.data();
 
-    for (final field in widget.requiredFields) {
-      switch (field) {
-        case 'benutzername':
-          if (_benutzername.text.trim().isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Bitte Benutzername angeben!')));
-            setState(() => _loading = false);
-            return;
-          }
-          break;
-        case 'vorname':
-          if (_vorname.text.trim().isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Bitte Vorname angeben!')));
-            setState(() => _loading = false);
-            return;
-          }
-          break;
-        case 'nachname':
-          if (_nachname.text.trim().isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Bitte Nachname angeben!')));
-            setState(() => _loading = false);
-            return;
-          }
-          break;
-        case 'geburtsdatum':
-          if (_geburtsdatum == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Bitte Geburtsdatum angeben!')));
-            setState(() => _loading = false);
-            return;
-          }
-          final age = _calculateAge(_geburtsdatum!);
-          if (age < 18) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content:
-                    Text('Du musst mindestens 18 Jahre alt sein, um dich zu registrieren.')));
-            setState(() => _loading = false);
-            return;
-          }
-          break;
-        case 'gender':
-          break;
-        case 'roles':
-          if (_roles.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Bitte wähle mindestens eine Rolle aus!')));
-            setState(() => _loading = false);
-            return;
-          }
-          break;
+    if (data != null) {
+      _benutzernameController.text = data['benutzername'] ?? '';
+      _vornameController.text = data['vorname'] ?? '';
+      _nachnameController.text = data['nachname'] ?? '';
+      _plzController.text = data['plz'] ?? '';
+      _cityController.text = data['city'] ?? '';
+
+      if (data['geburtsdatum'] != null) {
+        _geburtsdatum = (data['geburtsdatum'] as Timestamp).toDate();
       }
-    }
-
-    final age = _geburtsdatum != null ? _calculateAge(_geburtsdatum!) : null;
-
-    final userData = {
-      'uid': widget.user.uid,
-      'benutzername': _benutzername.text.trim(),
-      'vorname': _vorname.text.trim(),
-      'nachname': _nachname.text.trim(),
-      'email': widget.user.email,
-      'geburtsdatum': _geburtsdatum,
-      'age': age,
-      'ageHidden': _ageHidden,
-      'gender': _gender,
-      'plz': _plz.text.trim(),
-      'city': _city.text.trim(),
-      'roles': _roles,
-      'diskretModus': _diskretModus,
-      'pinHash': _diskretModus ? _pin.text.trim() : "",
-      'doggyIds': <String>[],
-      'herrchenIds': <String>[],
-      'premium': {'doggy': false, 'herrchen': false},
-      'profileImageUrl': _profileImageUrl ?? '',
-      'createdAt': FieldValue.serverTimestamp(),
-    };
-
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.user.uid)
-          .set(userData);
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profil erfolgreich gespeichert!')));
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.user.uid)
-          .get();
-      final data = doc.data();
-      final roles = List<String>.from(data?['roles'] ?? []);
-      if (roles.contains('doggy')) {
-        Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (_) => const DoggyScreen()));
-      } else if (roles.contains('herrchen')) {
-        Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (_) => const HerrchenScreen()));
-      } else {
-        widget.onSaved();
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler beim Speichern des Profils: $e')));
+      _selectedGender = data['gender'];
+      _doggyRole = (data['roles'] as List<dynamic>).contains('doggy');
+      _herrchenRole = (data['roles'] as List<dynamic>).contains('herrchen');
+      _diskretModus = data['diskretModus'] ?? false;
+      _ageHidden = data['ageHidden'] ?? false;
+      _profileImageUrl = data['profileImageUrl'];
+      _selectedFavoriteColor = data['favoriteColor']; // Lieblingsfarbe laden
+      // PIN wird nicht direkt geladen, da nur der Hash gespeichert wird
     }
     setState(() => _loading = false);
   }
 
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setState(() => _loading = true);
+      try {
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('profile_images/${widget.user.uid}.jpg');
+        await storageRef.putFile(File(image.path));
+        final imageUrl = await storageRef.getDownloadURL();
+        setState(() {
+          _profileImageUrl = imageUrl;
+        });
+        // Speichern der URL in Firestore
+        await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).update({
+          'profileImageUrl': imageUrl,
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profilbild erfolgreich hochgeladen!')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler beim Hochladen des Bildes: $e')),
+        );
+      } finally {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _geburtsdatum ?? DateTime.now(),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null && picked != _geburtsdatum) {
+      setState(() {
+        _geburtsdatum = picked;
+      });
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (!_doggyRole && !_herrchenRole) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bitte wähle mindestens eine Rolle aus (Doggy oder Herrchen).')),
+      );
+      return;
+    }
+
+    if (_diskretModus && _pinController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bitte gib eine PIN für den diskreten Modus ein.')),
+      );
+      return;
+    }
+    if (_diskretModus && _pinController.text.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Die PIN muss 6 Ziffern lang sein.')),
+      );
+      return;
+    }
+
+
+    setState(() => _loading = true);
+    List<String> roles = [];
+    if (_doggyRole) roles.add('doggy');
+    if (_herrchenRole) roles.add('herrchen');
+
+    String pinHash = '';
+    if (_diskretModus && _pinController.text.isNotEmpty) {
+      pinHash = sha256hash(_pinController.text.trim());
+    }
+
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).update({
+        'benutzername': _benutzernameController.text.trim(),
+        'vorname': _vornameController.text.trim(),
+        'nachname': _nachnameController.text.trim(),
+        'geburtsdatum': _geburtsdatum != null ? Timestamp.fromDate(_geburtsdatum!) : null,
+        'gender': _selectedGender,
+        'roles': roles,
+        'diskretModus': _diskretModus,
+        'pinHash': pinHash,
+        'ageHidden': _ageHidden,
+        'plz': _plzController.text.trim(),
+        'city': _cityController.text.trim(),
+        'favoriteColor': _selectedFavoriteColor, // Lieblingsfarbe speichern
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profil erfolgreich gespeichert!')),
+      );
+      widget.onSaved();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Fehler beim Speichern des Profils: $e')),
+      );
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  // KORREKTUR: Validierungsfunktionen verwenden die _fieldDisplayNames Map für
+  // benutzerfreundliche Fehlermeldungen.
+  String? _validateRequired(String? value, String fieldName) {
+    if (widget.missingFields.contains(fieldName) && (value == null || value.isEmpty)) {
+      final displayName = _fieldDisplayNames[fieldName] ?? fieldName;
+      return '$displayName ist erforderlich.';
+    }
+    return null;
+  }
+
+  String? _validateRequiredDate(DateTime? value, String fieldName) {
+    if (widget.missingFields.contains(fieldName) && value == null) {
+      final displayName = _fieldDisplayNames[fieldName] ?? fieldName;
+      return '$displayName ist erforderlich.';
+    }
+    return null;
+  }
+
+  String? _validateRequiredRole() {
+    if (widget.missingFields.contains('roles') && !_doggyRole && !_herrchenRole) {
+      return 'Mindestens eine Rolle (Doggy/Herrchen) ist erforderlich.';
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final age = _geburtsdatum != null ? _calculateAge(_geburtsdatum!) : null;
-    ImageProvider? imageProvider;
-    if (_profileImageUrl != null && _profileImageUrl!.startsWith('http')) {
-      imageProvider = NetworkImage(_profileImageUrl!);
-    }
-    return Card(
-        color: const Color(0xFF1C1C1C),
-        elevation: 12,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Text('Profildaten vervollständigen',
-                    style:
-                        TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white)),
-                if (widget.missingFields.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 12),
-                    child: ElevatedButton.icon(
-                        icon: const Icon(Icons.info_outline),
-                        label: const Text('Warum Profildaten vervollständigen?'),
-                        onPressed: _showMissingFieldsHint),
-                  ),
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: _pickProfileImage,
-                  child: CircleAvatar(
-                    radius: 56,
-                    backgroundImage: imageProvider,
-                    child: imageProvider == null
-                        ? const Icon(Icons.person, size: 56)
-                        : null,
+    final screenHeight = MediaQuery.of(context).size.height;
+    
+    // KORREKTUR: Erzeuge eine lesbare Liste der fehlenden Felder für die UI.
+    final missingFieldDisplayNames = widget.missingFields
+        .map((field) => _fieldDisplayNames[field] ?? field)
+        .join(', ');
+
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: screenHeight * 0.05), // Abstand von oben
+
+              Center(
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 60,
+                      backgroundColor: Colors.white10,
+                      backgroundImage: _profileImageUrl != null
+                          ? NetworkImage(_profileImageUrl!)
+                          : null,
+                      child: _profileImageUrl == null
+                          ? Icon(
+                              Icons.person,
+                              size: 60,
+                              color: Colors.white70,
+                            )
+                          : null,
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: IconButton(
+                        icon: const Icon(Icons.camera_alt, color: Colors.orange, size: 30),
+                        onPressed: _pickImage,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Profil vervollständigen',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              if (widget.missingFields.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Text(
+                    // KORREKTUR: Verwende die lesbare Liste.
+                    'Bitte fülle die folgenden fehlenden Felder aus: $missingFieldDisplayNames',
+                    style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-                const SizedBox(height: 12),
-                Text("Profilbild hochladen",
-                    style: TextStyle(color: Colors.orange.shade700)),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _benutzername,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: "Benutzername",
-                    hintText: "Wähle deinen öffentlichen Namen aus",
+              TextFormField(
+                controller: _benutzernameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: 'Benutzername'),
+                validator: (value) => _validateRequired(value, 'benutzername'),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _vornameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: 'Vorname'),
+                validator: (value) => _validateRequired(value, 'vorname'),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _nachnameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: 'Nachname'),
+                validator: (value) => _validateRequired(value, 'nachname'),
+              ),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () => _selectDate(context),
+                child: AbsorbPointer(
+                  child: TextFormField(
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: _geburtsdatum == null
+                          ? 'Geburtsdatum'
+                          : 'Geburtsdatum: ${_geburtsdatum!.toLocal().toIso8601String().split('T')[0]}',
+                      suffixIcon: const Icon(Icons.calendar_today, color: Colors.white70),
+                    ),
+                    validator: (value) => _validateRequiredDate(_geburtsdatum, 'geburtsdatum'),
                   ),
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _vorname,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: "Vorname",
-                    suffixIcon: infoIcon("Wird nie für andere Nutzer angezeigt"),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _nachname,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: "Nachname",
-                    suffixIcon: infoIcon("Wird nie für andere Nutzer angezeigt"),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: () => _pickGeburtsdatum(context),
-                  child: AbsorbPointer(
-                    child: TextField(
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedGender,
+                dropdownColor: const Color(0xFF1C1C1C),
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: 'Geschlecht'),
+                items: ['Männlich', 'Weiblich', 'Divers', 'Möchte ich nicht angeben']
+                    .map((String gender) {
+                  return DropdownMenuItem<String>(
+                    value: gender,
+                    child: Text(gender),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _selectedGender = newValue;
+                  });
+                },
+                
+                validator: (value) => _validateRequired(value, 'gender'),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _plzController,
                       style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                          labelText: 'Geburtsdatum',
-                          hintText: 'TT.MM.JJJJ',
-                          suffixIcon:
-                              infoIcon("Wird benötigt zur Altersverifikation")),
-                      controller: TextEditingController(
-                          text: _geburtsdatum == null
-                              ? ''
-                              : "${_geburtsdatum!.day.toString().padLeft(2, '0')}.${_geburtsdatum!.month.toString().padLeft(2, '0')}.${_geburtsdatum!.year}"),
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Postleitzahl'),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                if (age != null)
-                  Row(children: [
-                    Text("Alter: $age", style: const TextStyle(color: Colors.white)),
-                    const SizedBox(width: 14),
-                    Checkbox(
-                        value: _ageHidden,
-                        fillColor:
-                            MaterialStateProperty.all(Colors.orange.shade700),
-                        checkColor: Colors.black,
-                        onChanged: (v) => setState(() => _ageHidden = v ?? false)),
-                    Text("Alter nicht anzeigen",
-                        style: TextStyle(color: Colors.white70)),
-                  ]),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: _gender,
-                  dropdownColor: const Color(0xFF2A2A2A),
-                  style: const TextStyle(color: Colors.white),
-                  items: ["männlich", "weiblich", "divers"]
-                      .map((g) => DropdownMenuItem(
-                            value: g,
-                            child: Text(g, style: const TextStyle(color: Colors.white)),
-                          ))
-                      .toList(),
-                  onChanged: (v) => setState(() => _gender = v ?? "männlich"),
-                  decoration: const InputDecoration(labelText: "Geschlecht"),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _plz,
-                  style: const TextStyle(color: Colors.white),
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                      labelText: "PLZ (optional)",
-                      suffixIcon: infoIcon(
-                          "PLZ und Ort sind optional. Für regionale Premium-Suchfunktionen benötigt.")),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _city,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                      labelText: "Ort (optional)",
-                      suffixIcon: infoIcon(
-                          "PLZ und Ort sind optional. Für regionale Premium-Suchfunktionen benötigt.")),
-                ),
-                const SizedBox(height: 16),
-                Row(children: [
-                  Checkbox(
-                      value: _roles.contains('doggy'),
-                      fillColor:
-                          MaterialStateProperty.all(Colors.orange.shade700),
-                      checkColor: Colors.black,
-                      onChanged: (v) => setState(() {
-                            v == true
-                                ? _roles.add('doggy')
-                                : _roles.remove('doggy');
-                          })),
-                  const Text('Doggy', style: TextStyle(color: Colors.white)),
-                  const SizedBox(width: 20),
-                  Checkbox(
-                      value: _roles.contains('herrchen'),
-                      fillColor:
-                          MaterialStateProperty.all(Colors.orange.shade700),
-                      checkColor: Colors.black,
-                      onChanged: (v) => setState(() {
-                            v == true
-                                ? _roles.add('herrchen')
-                                : _roles.remove('herrchen');
-                          })),
-                  const Text('Herrchen', style: TextStyle(color: Colors.white)),
-                ]),
-                Row(children: [
-                  Checkbox(
-                      value: _diskretModus,
-                      fillColor:
-                          MaterialStateProperty.all(Colors.orange.shade700),
-                      checkColor: Colors.black,
-                      onChanged: (v) => setState(() => _diskretModus = v ?? false)),
-                  const Text("Diskreter Modus (App mit PIN sichern)",
-                      style: TextStyle(color: Colors.white)),
-                ]),
-                if (_diskretModus)
-                  TextField(
-                    controller: _pin,
-                    style: const TextStyle(color: Colors.white),
-                    obscureText: true,
-                    keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    decoration: const InputDecoration(labelText: "PIN (6-stellig)"),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _cityController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(labelText: 'Stadt'),
+                    ),
                   ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _loading ? null : _saveProfile,
-                    child: _loading
-                        ? const SizedBox(
-                            height: 20,
+                ],
+              ),
+              const SizedBox(height: 20),
+              // NEU: Lieblingsfarbe Dropdown
+              DropdownButtonFormField<String>(
+                value: _selectedFavoriteColor,
+                dropdownColor: const Color(0xFF1C1C1C),
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Lieblingsfarbe (Optional)',
+                  hintText: 'Wähle deine Lieblingsfarbe',
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('Keine Auswahl', style: TextStyle(color: Colors.white70)),
+                  ),
+                  ...widget.colorOptions.keys.map((String colorName) {
+                    return DropdownMenuItem<String>(
+                      value: colorName,
+                      child: Row(
+                        children: [
+                          Container(
                             width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 3,
-                              color: Colors.black,
-                            ),
-                          )
-                        : const Text("Profil speichern"),
+                            height: 20,
+                            color: widget.colorOptions[colorName],
+                          ),
+                          const SizedBox(width: 10),
+                          Text(colorName),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ],
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _selectedFavoriteColor = newValue;
+                  });
+                },
+              ),
+              const SizedBox(height: 20),
+              const Text('Rollen:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              CheckboxListTile(
+                title: const Text('Doggy (oder Streuner)', style: TextStyle(color: Colors.white)),
+                value: _doggyRole,
+                onChanged: (bool? value) {
+                  setState(() {
+                    _doggyRole = value ?? false;
+                  });
+                },
+                controlAffinity: ListTileControlAffinity.leading,
+                activeColor: Theme.of(context).colorScheme.primary, // Dynamische Farbe
+                checkColor: Colors.black,
+              ),
+              CheckboxListTile(
+                title: const Text('Herrchen', style: TextStyle(color: Colors.white)),
+                value: _herrchenRole,
+                onChanged: (bool? value) {
+                  setState(() {
+                    _herrchenRole = value ?? false;
+                  });
+                },
+                controlAffinity: ListTileControlAffinity.leading,
+                activeColor: Theme.of(context).colorScheme.primary, // Dynamische Farbe
+                checkColor: Colors.black,
+              ),
+              if (_validateRequiredRole() != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 16.0, top: 8.0),
+                  child: Text(
+                    _validateRequiredRole()!,
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
                   ),
                 ),
-              ]),
-            )));
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Checkbox(
+                    value: _ageHidden,
+                    fillColor: MaterialStateProperty.all(Theme.of(context).colorScheme.secondary), // Dynamische Farbe
+                    checkColor: Colors.black,
+                    onChanged: (v) => setState(() => _ageHidden = v ?? false),
+                  ),
+                  const Text("Alter im Profil verstecken", style: TextStyle(color: Colors.white)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Checkbox(
+                    value: _diskretModus,
+                    fillColor: MaterialStateProperty.all(Theme.of(context).colorScheme.secondary), // Dynamische Farbe
+                    checkColor: Colors.black,
+                    onChanged: (v) => setState(() => _diskretModus = v ?? false),
+                  ),
+                  const Text("Diskreter Modus (App mit PIN sichern)", style: TextStyle(color: Colors.white)),
+                ],
+              ),
+              if (_diskretModus)
+                TextField(
+                  controller: _pinController,
+                  style: const TextStyle(color: Colors.white),
+                  obscureText: true,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: const InputDecoration(labelText: "PIN (6-stellig)"),
+                ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _loading ? null : _saveProfile,
+                  child: _loading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            color: Colors.black,
+                          ),
+                        )
+                      : const Text("Profil speichern"),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _benutzernameController.dispose();
+    _vornameController.dispose();
+    _nachnameController.dispose();
+    _plzController.dispose();
+    _cityController.dispose();
+    _pinController.dispose();
+    super.dispose();
   }
 }
