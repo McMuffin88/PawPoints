@@ -57,18 +57,7 @@ Widget buildHerrchenDrawer(BuildContext context, VoidCallback refreshProfileImag
                 leading: const Icon(Icons.account_circle),
                 title: const Text('Konto'),
                 children: [
-                  ListTile(
-                    leading: const Icon(Icons.person_outline),
-                    title: const Text('Profil anpassen'),
-                    onTap: () async {
-                      Navigator.pop(context);
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const HerrchenProfileScreen()),
-                      );
-                      refreshProfileImage();
-                    },
-                  ),
+                  // Das "Profil anpassen" ListTile wurde hier entfernt.                  ),
                   ListTile(
                     leading: const Icon(Icons.group),
                     title: const Text('Meine Doggys'),

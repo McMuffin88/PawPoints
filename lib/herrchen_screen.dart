@@ -1,12 +1,13 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pawpoints/Drawer_herrchen/Herrchen_drawer.dart';
 
 class HerrchenScreen extends StatefulWidget {
-  const HerrchenScreen({super.key});
+  // 1. Parameter für den Callback bleibt erhalten
+  final VoidCallback? onProfileTap;
+
+  const HerrchenScreen({super.key, this.onProfileTap});
 
   @override
   State<HerrchenScreen> createState() => _HerrchenScreenState();
@@ -15,52 +16,21 @@ class HerrchenScreen extends StatefulWidget {
 class _HerrchenScreenState extends State<HerrchenScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  List<Map<String, dynamic>> _tasks = [];
-  List<Map<String, dynamic>> _doggys = [];
+  // Die alten State-Variablen für Tasks und Doggys wurden entfernt.
   String? _profileImageUrl;
-  String _inviteCode = '';
+  
+  // Die Liste für Doggys wird hier leer initialisiert, 
+  // da sie noch an den Drawer übergeben wird. Später kann sie aus Firestore geladen werden.
+  final List<Map<String, dynamic>> _doggys = [];
 
   @override
   void initState() {
     super.initState();
-    _loadTasks();
+    // Die Aufrufe zum Laden von lokalen Daten wurden entfernt.
     _loadProfileImageFromFirestore();
-    _loadInviteCodeAndDoggys();
   }
 
-  Future<void> _loadTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final tasksJson = prefs.getString('doggy_tasks');
-    if (tasksJson != null) {
-      final List<dynamic> decoded = jsonDecode(tasksJson);
-      setState(() {
-        _tasks = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-      });
-    }
-  }
-
-  Future<void> _loadInviteCodeAndDoggys() async {
-    final prefs = await SharedPreferences.getInstance();
-    final doggyList = prefs.getString('doggys');
-    final inviteCode = prefs.getString('invite_code');
-    if (doggyList != null) {
-      setState(() {
-        _doggys = List<Map<String, dynamic>>.from(jsonDecode(doggyList));
-      });
-    }
-    if (inviteCode != null) {
-      setState(() {
-        _inviteCode = inviteCode;
-      });
-    }
-  }
-
-  Future<void> _saveTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonString = jsonEncode(_tasks);
-    await prefs.setString('doggy_tasks', jsonString);
-  }
-
+  // Die Funktion zum Laden des Profilbilds bleibt, da sie Firestore verwendet.
   Future<void> _loadProfileImageFromFirestore() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -68,9 +38,11 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
     final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
     final data = doc.data();
     if (data != null && data['profileImageUrl'] != null) {
-      setState(() {
-        _profileImageUrl = data['profileImageUrl'];
-      });
+      if (mounted) {
+        setState(() {
+          _profileImageUrl = data['profileImageUrl'];
+        });
+      }
     }
   }
 
@@ -95,12 +67,12 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
-      endDrawer: buildHerrchenDrawer(context, _loadProfileImageFromFirestore, _doggys),
+      drawer: buildHerrchenDrawer(context, _loadProfileImageFromFirestore, _doggys),
       appBar: AppBar(
         title: const Text('Meine Aufgaben'),
         actions: [
           GestureDetector(
-            onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
+            onTap: widget.onProfileTap,
             child: Padding(
               padding: const EdgeInsets.only(right: 12.0),
               child: _buildProfileIcon(),
@@ -108,15 +80,12 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
           ),
         ],
       ),
-      body: ListView.builder(
-        itemCount: _tasks.length,
-        itemBuilder: (_, index) {
-          final task = _tasks[index];
-          return ListTile(
-            title: Text(task['title'] ?? 'Aufgabe'),
-            subtitle: Text('Punkte: ${task['points'] ?? 0}'),
-          );
-        },
+      // Der Body zeigt nun einen Platzhalter, da die lokale Ladelogik entfernt wurde.
+      body: const Center(
+        child: Text(
+          'Aufgaben werden hier angezeigt.',
+          style: TextStyle(fontSize: 16, color: Colors.grey),
+        ),
       ),
     );
   }

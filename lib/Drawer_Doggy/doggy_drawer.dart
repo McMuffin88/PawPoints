@@ -57,19 +57,8 @@ Widget buildDoggyDrawer(BuildContext context) {
                     leading: const Icon(Icons.account_box),
                     title: const Text('Konto'),
                     children: [
-                      ListTile(
-                        leading: const Icon(Icons.person),
-                        title: const Text('Profil anzeigen'),
-                        onTap: () {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const DoggyProfileScreen(),
-                            ),
-                          );
-                        },
-                      ),
+                      // Der "Profil anzeigen" Link wurde entfernt,
+                      // da das Profil jetzt über die Bottom-Navigation zugänglich ist.
                       ListTile(
                         leading: const Icon(Icons.search),
                         title: const Text('Herrchen finden'),
@@ -100,7 +89,6 @@ Widget buildDoggyDrawer(BuildContext context) {
                           );
                         },
                       ),
-
                     ],
                   ),
                   const ExpansionTile(

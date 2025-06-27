@@ -195,6 +195,17 @@ class _MyDoggysScreenState extends State<MyDoggysScreen> {
               data: code,
               size: 200,
               version: QrVersions.auto,
+              // NEU: Hintergrundfarbe auf Weiß setzen
+              backgroundColor: Colors.white,
+              // NEU: Vordergrundfarbe auf Schwarz setzen, damit der QR-Code sichtbar ist
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: Colors.black,
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: Colors.black,
+              ),
             ),
             const SizedBox(height: 12),
             const Text('Einladungscode:', style: TextStyle(fontSize: 16)),
