@@ -3,7 +3,7 @@ description: Eine App für Aufgaben und Belohnungssysteme für Doggys 🐶 und H
 
 publish_to: 'none' # Dieses Projekt soll nicht im pub.dev veröffentlicht werden
 
-version: 0.0.2+2
+version: 0.0.3+2
 
 environment:
   sdk: ">=3.1.0 <4.0.0"

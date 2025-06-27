@@ -17,7 +17,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'firebase_options.dart';
+import 'firebase_options.dart'; // This import contains DefaultFirebaseOptions
 
 // Wichtig: Diese Dateien müssen in Ihrem Projekt existieren!
 import 'doggy_screen.dart';
@@ -93,7 +93,9 @@ class _PawPointsAppState extends State<PawPointsApp> {
       theme: ThemeData.dark(useMaterial3: true).copyWith(
         colorScheme: ColorScheme.dark(
           primary: _currentThemeColor, // Dynamische Primärfarbe
-          secondary: (_currentThemeColor as MaterialColor).shade700, // Korrektur hier
+          secondary: (_currentThemeColor is MaterialColor)
+              ? (_currentThemeColor as MaterialColor).shade700
+              : Colors.grey, // Robuster Fallback
           onPrimary: Colors.black,
           surface: const Color(0xFF1E1E1E),
           onSurface: Colors.white70,
@@ -156,12 +158,12 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
   List<String> _missingFields = [];
   bool _showPinVerification = false;
   bool _pinVerified = false; // Zustand: true, wenn PIN einmal korrekt eingegeben wurde
+  String _appVersion = 'Lade Version...'; // Zustand für die App-Version
 
   // KORREKTUR: Diese Liste MUSS exakt den Firestore-Feldnamen entsprechen (Kleinschreibung).
   final List<String> requiredProfileFields = [
     'benutzername',
     'vorname',
-
     'nachname',
     'geburtsdatum',
     'gender',
@@ -184,6 +186,7 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _loadAppVersion(); // App-Version laden
     WidgetsBinding.instance.addObserver(this); // Observer registrieren
     _checkAppVersion();
     // Start listening to auth state changes to react to login/logout
@@ -248,6 +251,21 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
     }
   }
 
+  // Methode zum Laden der App-Version
+  Future<void> _loadAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      setState(() {
+        _appVersion = 'Version ${packageInfo.version}';
+      });
+    } catch (e) {
+      setState(() {
+        _appVersion = 'Version unbekannt';
+      });
+      print('Fehler beim Laden der App-Version: $e');
+    }
+  }
+
   Future<void> _checkAppVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -287,10 +305,26 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (await canLaunchUrl(Uri.parse(url))) {
-                await launchUrl(Uri.parse(url));
+              Navigator.of(ctx).pop(); // Dialog schließen
+              // DEBUG-Ausgabe: Überprüfen, ob die URL empfangen wird
+              print('Update-Button gedrückt. Update URL: $url');
+              if (url != null && url.isNotEmpty) {
+                try {
+                  // Versuch, die URL zu starten
+                  await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                } catch (e) {
+                  // Wenn das Starten fehlschlägt, eine Fehlermeldung ausgeben
+                  print('Fehler beim Starten der URL: $e');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Konnte Update-Link nicht öffnen: $e')),
+                  );
+                }
+              } else {
+                print('Update-URL ist leer oder null.');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Keine Update-URL verfügbar.')),
+                );
               }
-              Navigator.of(ctx).pop();
             },
             child: const Text('Jetzt aktualisieren'),
           ),
@@ -570,6 +604,15 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
                       // If none of the above, it implies the user is authenticated, has a complete profile,
                       // and is not in discrete mode (or PIN was verified), so the role-based navigation
                       // within _afterLogin would have taken over.
+                      
+                      // NEU: Anzeige der App-Version am unteren Rand
+                      Padding(
+                        padding: const EdgeInsets.only(top: 20.0, bottom: 20.0),
+                        child: Text(
+                          _appVersion,
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
+                      ),
                     ],
                   ),
                 ),

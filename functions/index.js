@@ -146,18 +146,39 @@ exports.usernameToEmail = functions.https.onCall(async (data, context) => {
 // -----------------------------------------
 // 4. Versionsprüfung
 // -----------------------------------------
+
 exports.checkAppVersion = functions.https.onCall(async (data, context) => {
   const currentVersion = data.currentVersion || "0.0.0";
 
-  // Beispiel statische Werte, du kannst auch aus Firestore laden
-  const requiredVersion = "0.0.2";
-  const updateUrl = "https://drive.google.com/file/d/1bQ8CF0p0FhiS9AiXMNuGJxBbv3CS85Ns/view?usp=drive_link";
+  let requiredVersion = "0.0.0"; // Standardwert
+  let updateUrl = "https://example.com/your-app-store-link"; // Standard-Update-URL
+
+  try {
+    // Lade die Versionsinformation aus dem Dokument 'meta/version'
+    const versionDocRef = admin.firestore().collection('meta').doc('version');
+    const versionDoc = await versionDocRef.get();
+
+    if (versionDoc.exists) {
+      const versionData = versionDoc.data();
+      // Verwende das Feld 'version' aus Ihrem Firestore-Dokument für die erforderliche Version
+      requiredVersion = versionData.version || "0.0.0";
+      // Verwende das Feld 'downloadUrl' aus Ihrem Firestore-Dokument für die Update-URL
+      updateUrl = versionData.downloadUrl || updateUrl;
+    } else {
+      console.warn("Firestore-Dokument 'meta/version' nicht gefunden. Verwende Standardwerte.");
+    }
+  } catch (error) {
+    console.error("Fehler beim Laden der Versionsinformation aus Firestore:", error);
+    // Bei einem Fehler werden die Standardwerte beibehalten oder du könntest einen Fehler werfen
+  }
 
   function versionToNums(v) {
     return v.split('.').map(x => parseInt(x));
   }
+
   const cv = versionToNums(currentVersion);
   const rv = versionToNums(requiredVersion);
+
   let outdated = false;
   for (let i = 0; i < Math.max(cv.length, rv.length); i++) {
     const c = cv[i] || 0;
@@ -166,14 +187,17 @@ exports.checkAppVersion = functions.https.onCall(async (data, context) => {
       outdated = true;
       break;
     } else if (c > r) {
+      // Wenn die aktuelle Version HÖHER ist, ist kein Update nötig
+      outdated = false;
       break;
     }
+    // Wenn c == r, gehe zur nächsten Versionsnummer
   }
 
   return {
-    requiredVersion,
+    requiredVersion, // Die Version, die vom Backend als aktuellste angesehen wird
     updateUrl: outdated ? updateUrl : null,
-    outdated
+    outdated // Boolean, ob die aktuelle App-Version veraltet ist
   };
 });
 
