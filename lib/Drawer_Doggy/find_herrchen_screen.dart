@@ -252,7 +252,6 @@ class _FindHerrchenScreenState extends State<FindHerrchenScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const isMobile = !kIsWeb;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Herrchen finden')),

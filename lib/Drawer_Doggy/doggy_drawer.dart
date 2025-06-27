@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'doggy_profile_screen.dart';
 import 'doggy_shop_screen.dart';
 import 'package:pawpoints/Drawer_Doggy/find_herrchen_screen.dart';
 import '../roadmap_screen.dart';

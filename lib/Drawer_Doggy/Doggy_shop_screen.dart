@@ -71,7 +71,6 @@ final rewardsStream = FirebaseFirestore.instance
             return const Center(child: CircularProgressIndicator());
           }
           final userData = userSnap.data!.data() as Map<String, dynamic>? ?? {};
-          final doggyName = userData['name'] as String? ?? 'Doggy';
           final points = userData['points'] as int? ?? 0;
 
           return Padding(
@@ -113,7 +112,6 @@ final rewardsStream = FirebaseFirestore.instance
                         itemCount: docs.length,
                         itemBuilder: (ctx, i) {
                         final r = docs[i].data() as Map<String, dynamic>;
-                        final visible = r['visibleToDoggy'] as bool? ?? false;
                         final title = r['title'] as String? ?? '';
                         final desc = r['description'] as String? ?? '';
                         final cost = r['points'] as int? ?? 0;

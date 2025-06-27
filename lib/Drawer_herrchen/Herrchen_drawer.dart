@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:pawpoints/Settings/herrchen_notification.dart';
 
-import 'herrchen_profile_screen.dart';
 import 'mydoggys_screen.dart';
 import 'doggy_berechtigungen_screen.dart';
 import 'herrchen_shop_screen.dart';
@@ -11,7 +10,6 @@ import '../Settings/premium_screen.dart';
 import '../roadmap_screen.dart';
 import '../main.dart';
 
-import '../Start/bottom_navigator.dart';
 
 
 

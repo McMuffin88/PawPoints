@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import '../herrchen_screen.dart';
-import '../doggy_screen.dart';
-import '../Drawer_herrchen/herrchen_profile_screen.dart'; // 1. PROFIL-SCREEN IMPORTIEREN
+// 1. PROFIL-SCREEN IMPORTIEREN
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
