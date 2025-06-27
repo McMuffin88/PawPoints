@@ -4,7 +4,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import 'Drawer_Doggy/doggy_profile_screen.dart';
 import '/Drawer_Doggy/doggy_drawer.dart';
 
 // ICON-MAP HINZUFÜGEN
@@ -30,9 +29,7 @@ class DoggyScreen extends StatefulWidget {
 }
 
 class _DoggyScreenState extends State<DoggyScreen> {
-  String? _webImagePath;
   String _doggyName = 'Doggy';
-  int _points = 0;
 
   @override
   void initState() {
@@ -53,9 +50,7 @@ class _DoggyScreenState extends State<DoggyScreen> {
     final data = doc.data();
     if (data == null) return;
     setState(() {
-      _webImagePath = data['profileImageUrl'] as String?;
       _doggyName = data['benutzername'] as String? ?? 'Doggy';
-      _points = data['points'] as int? ?? 0;
     });
   }
 
@@ -75,7 +70,6 @@ class _DoggyScreenState extends State<DoggyScreen> {
       final timeStr =
           '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
       print('🛠️ [DEBUG][$timeStr] Neuer Punkte-Stand: $newPoints');
-      setState(() => _points = newPoints);
     });
   }
 
@@ -214,7 +208,6 @@ class _DoggyScreenState extends State<DoggyScreen> {
         }
         final docs = snap.data!.docs;
         final instances = <Map<String, dynamic>>[];
-        final toDelete = <DocumentReference>[];
 
         for (var doc in docs) {
           final data = doc.data()! as Map<String, dynamic>;

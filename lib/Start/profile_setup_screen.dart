@@ -57,7 +57,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             await ref.putFile(file);
           }
 
-          final imageUrl = await ref.getDownloadURL(); // ✅ DAS ist die richtige URL
+// ✅ DAS ist die richtige URL
         }
 
 // Und jetzt funktioniert das hier:

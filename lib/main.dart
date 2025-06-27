@@ -20,8 +20,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'firebase_options.dart'; // This import contains DefaultFirebaseOptions
 
 // Wichtig: Diese Dateien müssen in Ihrem Projekt existieren!
-import 'doggy_screen.dart';
-import 'herrchen_screen.dart';
 import 'Start/bottom_navigator.dart';
 
 void main() async {
@@ -308,7 +306,7 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
               Navigator.of(ctx).pop(); // Dialog schließen
               // DEBUG-Ausgabe: Überprüfen, ob die URL empfangen wird
               print('Update-Button gedrückt. Update URL: $url');
-              if (url != null && url.isNotEmpty) {
+              if (url.isNotEmpty) {
                 try {
                   // Versuch, die URL zu starten
                   await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
