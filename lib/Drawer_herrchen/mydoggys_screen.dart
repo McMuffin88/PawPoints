@@ -2,9 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:crypto/crypto.dart';
-import 'dart:convert';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+
 
 class MyDoggysScreen extends StatefulWidget {
   final List<Map<String, dynamic>>? doggys;
@@ -21,11 +21,17 @@ class _MyDoggysScreenState extends State<MyDoggysScreen> {
   List<QueryDocumentSnapshot> _pendingRequests = [];
   bool _isLoading = true;
 
+  // Einladungscode-Logik
+  String? _einladungscode;
+  DateTime? _codeErstelltAm;
+  bool _isCodeLoading = true;
+
   @override
   void initState() {
     super.initState();
     _doggys = widget.doggys ?? [];
     _loadData();
+    _fetchInviteCode(); // NEU: Einladungscode holen/generieren
   }
 
   Future<void> _loadData() async {
@@ -77,10 +83,34 @@ class _MyDoggysScreenState extends State<MyDoggysScreen> {
     });
   }
 
-  String _generateInviteCode(String uid) {
-    final hash = sha256.convert(utf8.encode(uid));
-    return hash.toString().substring(0, 10);
+  // NEU: Einladungscode aus Cloud Function holen!
+  Future<void> _fetchInviteCode() async {
+    setState(() => _isCodeLoading = true);
+
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('checkOrCreateInviteCode');
+      final result = await callable.call();
+      final data = result.data;
+      setState(() {
+        _einladungscode = data['code'];
+        if (data['erstelltAm'] != null) {
+          // Firestore Timestamp zu Dart DateTime
+          _codeErstelltAm = (data['erstelltAm']['_seconds'] != null)
+              ? DateTime.fromMillisecondsSinceEpoch(data['erstelltAm']['_seconds'] * 1000)
+              : null;
+        }
+        _isCodeLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _einladungscode = null;
+        _isCodeLoading = false;
+      });
+      debugPrint("Fehler beim Holen des Einladungscodes: $e");
+    }
   }
+
+  // --- Der Rest deiner Funktionen bleibt erhalten (keine Einladungscode-Generierung mehr nötig!) ---
 
   Future<void> _acceptInvite(String inviteId, String doggyId) async {
     final herrchenId = FirebaseAuth.instance.currentUser!.uid;
@@ -180,8 +210,6 @@ class _MyDoggysScreenState extends State<MyDoggysScreen> {
       );
     }
 
-    final code = widget.inviteCode ?? _generateInviteCode(user.uid);
-
     return Scaffold(
       appBar: AppBar(title: const Text('Meine Doggys')),
       body: _isLoading
@@ -191,39 +219,62 @@ class _MyDoggysScreenState extends State<MyDoggysScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            QrImageView(
-              data: code,
-              size: 200,
-              version: QrVersions.auto,
-              // NEU: Hintergrundfarbe auf Weiß setzen
-              backgroundColor: Colors.white,
-              // NEU: Vordergrundfarbe auf Schwarz setzen, damit der QR-Code sichtbar ist
-              eyeStyle: const QrEyeStyle(
-                eyeShape: QrEyeShape.square,
-                color: Colors.black,
-              ),
-              dataModuleStyle: const QrDataModuleStyle(
-                dataModuleShape: QrDataModuleShape.square,
-                color: Colors.black,
+            // NEU: Einladungscode-Anzeige mit Ablaufdatum
+            Card(
+              margin: const EdgeInsets.only(bottom: 24),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: _isCodeLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _einladungscode != null
+                        ? Column(
+                            children: [
+                              QrImageView(
+                                data: _einladungscode!,
+                                size: 200,
+                                version: QrVersions.auto,
+                                backgroundColor: Colors.white,
+                                eyeStyle: const QrEyeStyle(
+                                  eyeShape: QrEyeShape.square,
+                                  color: Colors.black,
+                                ),
+                                dataModuleStyle: const QrDataModuleStyle(
+                                  dataModuleShape: QrDataModuleShape.square,
+                                  color: Colors.black,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              const Text('Einladungscode:', style: TextStyle(fontSize: 16)),
+                              const SizedBox(height: 4),
+                              SelectableText(_einladungscode!, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              if (_codeErstelltAm != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: Text(
+                                    'Gültig bis: ${_codeErstelltAm!.add(const Duration(days: 28)).toLocal().toString().substring(0, 16)}',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                  ),
+                                ),
+                              const SizedBox(height: 8),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  Clipboard.setData(ClipboardData(text: _einladungscode!));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Einladungscode kopiert')),
+                                  );
+                                },
+                                icon: const Icon(Icons.copy),
+                                label: const Text('Kopieren'),
+                              ),
+                            ],
+                          )
+                        : const Text(
+                            'Fehler beim Laden des Einladungscodes.',
+                            style: TextStyle(color: Colors.red),
+                          ),
               ),
             ),
-            const SizedBox(height: 12),
-            const Text('Einladungscode:', style: TextStyle(fontSize: 16)),
-            const SizedBox(height: 4),
-            SelectableText(code, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: code));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Einladungscode kopiert')),
-                );
-              },
-              icon: const Icon(Icons.copy),
-              label: const Text('Kopieren'),
-            ),
-            const SizedBox(height: 32),
-
+            // --- Rest wie bisher ---
             if (_doggys.isEmpty)
               const Column(
                 children: [

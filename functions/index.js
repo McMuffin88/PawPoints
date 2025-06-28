@@ -220,3 +220,193 @@ exports.getProfileRequirements = functions.https.onCall(async (data, context) =>
     infoMessage: profileData.infoMessage || ''
   };
 });
+
+// -----------------------------------------
+// 6. Einladungscode prüfen/erstellen (NEU!)
+// -----------------------------------------
+exports.checkOrCreateInviteCode = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
+
+  const db = admin.firestore();
+  const userRef = db.collection('users').doc(uid);
+  const userDoc = await userRef.get();
+  const user = userDoc.data() || {};
+
+  // Prüfe, ob ein gültiger Code existiert
+  const code = user.einladungscode;
+  const erstelltAm = user.code_erstellt_am ? user.code_erstellt_am.toDate() : null;
+  let nochGueltig = false;
+  if (code && erstelltAm) {
+    const vierWochen = 28 * 24 * 60 * 60 * 1000; // 28 Tage in ms
+    nochGueltig = (Date.now() - erstelltAm.getTime()) < vierWochen;
+  }
+
+  if (code && nochGueltig) {
+    return { code, erstelltAm: user.code_erstellt_am };
+  }
+
+  // Neuen Code generieren (6-stellig, nur Buchstaben/Zahlen)
+  const newCode = Math.random().toString(36).substr(2, 6).toUpperCase();
+  const now = admin.firestore.Timestamp.now();
+
+  await userRef.set({
+    einladungscode: newCode,
+    code_erstellt_am: now
+  }, { merge: true });
+
+  return { code: newCode, erstelltAm: now };
+});
+
+// -----------------------------------------
+// 7. Einladungscode prüfen + Herrchen-Vorschau + Verknüpfungs-Check
+// -----------------------------------------
+exports.checkInviteCodeAndPreview = functions.https.onCall(async (data, context) => {
+  function normalizeGender(gender) {
+    if (!gender) return null;
+    const lower = ('' + gender).toLowerCase();
+    if (['male', 'männlich'].includes(lower)) return 'male';
+    if (['female', 'weiblich'].includes(lower)) return 'female';
+    if (['diverse', 'divers'].includes(lower)) return 'diverse';
+    return null;
+  }
+
+  const code = (data.code || '').trim();
+  const doggyId = context.auth?.uid;
+
+  if (!code) throw new functions.https.HttpsError('invalid-argument', 'Kein Code angegeben.');
+  if (!doggyId) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
+
+  // Suche Herrchen-User mit diesem Einladungscode
+  const herrchenSnap = await admin.firestore()
+    .collection('users')
+    .where('einladungscode', '==', code)
+    .limit(1)
+    .get();
+
+  if (herrchenSnap.empty) throw new functions.https.HttpsError('not-found', 'Einladungscode ungültig oder abgelaufen.');
+
+  const herrchenDoc = herrchenSnap.docs[0];
+  const herrchenId = herrchenDoc.id;
+  const herrchen = herrchenDoc.data();
+
+  // Gültigkeit prüfen
+  const createdAt = herrchen.code_erstellt_am?.toDate?.();
+  if (!createdAt) throw new functions.https.HttpsError('failed-precondition', 'Kein gültiges Erstellungsdatum gespeichert.');
+  const expiresAt = new Date(createdAt.getTime() + 28 * 24 * 60 * 60 * 1000);
+  if (Date.now() > expiresAt.getTime()) throw new functions.https.HttpsError('failed-precondition', 'Einladungscode abgelaufen.');
+
+  // Prüfen, ob das Doggy schon beim Herrchen hängt
+  const doggyDoc = await herrchenDoc.ref.collection('doggys').doc(doggyId).get();
+  const alreadyConnected = doggyDoc.exists;
+
+  // Herrchen-Vorschau aufbauen
+  const doggysSnap = await herrchenDoc.ref.collection('doggys').get();
+
+  return {
+    alreadyConnected, // bool
+    herrchenId,
+    benutzername: herrchen.benutzername ?? '',
+    profileImageUrl: herrchen.profileImageUrl ?? '',
+    age: herrchen.age ?? null,
+    gender: normalizeGender(herrchen.gender),
+    doggyCount: doggysSnap.size,
+  };
+});
+
+// -----------------------------------------
+// 8. Verbindungsanfrage: Doggy → Herrchen (Doggy schickt Anfrage)
+// -----------------------------------------
+exports.requestConnectionToHerrchen = functions.https.onCall(async (data, context) => {
+  const doggyId = context.auth?.uid;
+  const code = (data.code || '').trim();
+
+  if (!doggyId) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
+  if (!code) throw new functions.https.HttpsError('invalid-argument', 'Kein Einladungscode übergeben.');
+
+  // Herrchen suchen
+  const herrchenSnap = await admin.firestore()
+    .collection('users')
+    .where('einladungscode', '==', code)
+    .limit(1)
+    .get();
+
+  if (herrchenSnap.empty) throw new functions.https.HttpsError('not-found', 'Herrchen nicht gefunden.');
+  const herrchenDoc = herrchenSnap.docs[0];
+  const herrchenId = herrchenDoc.id;
+
+  // Prüfe, ob schon eine offene Anfrage existiert:
+  const requestRef = admin.firestore()
+    .collection('users').doc(herrchenId)
+    .collection('pendingDoggyRequests')
+    .doc(doggyId);
+
+  if ((await requestRef.get()).exists) {
+    throw new functions.https.HttpsError('already-exists', 'Anfrage läuft bereits.');
+  }
+
+  // Anfrage speichern, JETZT MIT herrchenId!
+  await requestRef.set({
+    doggyId,
+    herrchenId, // <<<<<<<<<<< HINZUGEFÜGT
+    requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+    status: 'pending',
+  });
+
+  // (Optional: Benachrichtigung an Herrchen senden)
+
+  return { success: true };
+});
+
+
+// -----------------------------------------
+// 9. Herrchen bestätigt oder lehnt Doggy-Anfrage ab
+// -----------------------------------------
+exports.respondToDoggyRequest = functions.https.onCall(async (data, context) => {
+  const herrchenId = context.auth?.uid;
+  const doggyId = data.doggyId;
+  const accepted = data.accepted; // true = akzeptieren, false = ablehnen
+
+  if (!herrchenId) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
+  if (!doggyId) throw new functions.https.HttpsError('invalid-argument', 'Kein Doggy angegeben.');
+
+  const requestRef = admin.firestore()
+    .collection('users').doc(herrchenId)
+    .collection('pendingDoggyRequests')
+    .doc(doggyId);
+
+  const reqDoc = await requestRef.get();
+  if (!reqDoc.exists) throw new functions.https.HttpsError('not-found', 'Anfrage nicht gefunden.');
+
+  if (accepted) {
+    // Verbindung herstellen:
+    await admin.firestore()
+      .collection('users')
+      .doc(herrchenId)
+      .collection('doggys')
+      .doc(doggyId)
+      .set({
+        uid: doggyId,
+        verbundenAm: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+    await admin.firestore()
+      .collection('users')
+      .doc(doggyId)
+      .collection('assignedHerrchen')
+      .doc(herrchenId)
+      .set({
+        name: reqDoc.data().benutzername ?? 'Unbekannt', // Passe ggf. an!
+        status: 'aktiv',
+        connectedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+    // Anfrage auf "accepted" setzen
+    await requestRef.update({ status: 'accepted', decidedAt: admin.firestore.FieldValue.serverTimestamp() });
+  } else {
+    await requestRef.update({ status: 'rejected', decidedAt: admin.firestore.FieldValue.serverTimestamp() });
+  }
+
+  return { success: true };
+});
+
