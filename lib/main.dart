@@ -381,9 +381,6 @@ Future<void> _downloadAndInstallApk(String apkUrl, BuildContext context) async {
     // VERWENDEN SIE HIER IHREN NEUEN GITHUB-LINK (Repository ist jetzt öffentlich)
     const String githubDirectDownloadUrl = 'https://github.com/McMuffin88/PawPoints/releases/download/Updater/app-release.apk';
 
-    // Personal Access Token (PAT) ist NICHT MEHR NÖTIG, da das Repository öffentlich ist.
-    // const String githubToken = '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'; // Diese Zeile wurde entfernt.
-
     if (kDebugMode) {
       print("DEBUG: Die APK-Datei wird heruntergeladen von: $githubDirectDownloadUrl");
       print("DEBUG: Die APK-Datei wird hier gespeichert: $savePath");
