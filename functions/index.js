@@ -67,58 +67,45 @@ exports.onTaskCompleted = functions.firestore
     }
   });
 
-// ANGEPASST: Passwort zurücksetzen via Benutzername ODER E-Mail
+// Passwort vergessen via Benutzername ODER E-Mail: Gibt nur E-Mail (oder null) zurück
 exports.sendPasswordResetByUsernameOrEmail = functions.https.onCall(async (data, context) => {
-  const identifier = (data.identifier || '').trim(); // Kann Benutzername oder E-Mail sein
+  const identifier = (data.identifier || '').trim();
+
+  console.log("🟠 [Passwort-Reset] Funktion aufgerufen mit:", identifier);
 
   if (!identifier) {
+    console.warn("🟡 [Passwort-Reset] Kein Identifier übergeben.");
     throw new functions.https.HttpsError('invalid-argument', 'Identifier is required.');
   }
 
   let emailToSendReset = null;
 
-  // 1. Prüfen, ob der Identifier eine gültige E-Mail-Adresse ist
+  // Prüfen, ob der Identifier eine gültige E-Mail-Adresse ist
   const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/;
   if (emailRegex.test(identifier)) {
-    emailToSendReset = identifier; // Es ist eine E-Mail
+    emailToSendReset = identifier;
+    console.log("🔵 [Passwort-Reset] Identifier ist eine E-Mail:", emailToSendReset);
   } else {
-    // 2. Wenn es keine E-Mail ist, versuchen wir, es als Benutzernamen zu behandeln
-    // Suchen Sie in Ihrer Firestore-Datenbank nach dem Benutzer mit diesem Benutzernamen
+    // Wenn kein E-Mail, als Benutzername behandeln
     try {
       const usersRef = admin.firestore().collection('users');
-      // Verwenden Sie 'benutzername' wie in Ihrem Firestore-Schema
       const querySnapshot = await usersRef.where('benutzername', '==', identifier).limit(1).get();
 
       if (!querySnapshot.empty) {
         emailToSendReset = querySnapshot.docs[0].data().email;
+        console.log("🟢 [Passwort-Reset] E-Mail für Benutzernamen gefunden:", emailToSendReset);
+      } else {
+        console.warn("🔴 [Passwort-Reset] Kein Benutzer mit diesem Benutzernamen gefunden:", identifier);
       }
     } catch (error) {
-      console.error("Error fetching user by username for password reset:", error);
-      // Ignoriere diesen Fehler für den Benutzer, um keine Informationen preiszugeben
+      console.error("❌ [Passwort-Reset] Fehler beim Firestore-Query:", error);
     }
   }
 
-  // Wichtig: Geben Sie IMMER die gleiche Nachricht zurück,
-  // unabhängig davon, ob die E-Mail gefunden wurde oder nicht,
-  // um Benutzer-Enumeration zu verhindern.
-  if (emailToSendReset) {
-    try {
-      await admin.auth().sendPasswordResetEmail(emailToSendReset);
-      console.log(`Password reset email sent (or attempted) for identifier: ${identifier}`);
-    } catch (error) {
-      // Wenn das Senden der E-Mail fehlschlägt (z.B. ungültige E-Mail-Adresse bei Firebase Auth),
-      // protokollieren Sie es serverseitig, aber geben Sie dem Benutzer immer noch die generische Nachricht.
-      console.error(`Failed to send password reset email for ${emailToSendReset}:`, error);
-    }
-  } else {
-    // Wenn keine E-Mail gefunden wurde (weder direkte E-Mail noch über Benutzername),
-    // protokollieren Sie dies, aber geben Sie dem Benutzer die generische Nachricht.
-    console.log(`No email found for identifier: ${identifier}. Still sending generic success message.`);
-  }
-
-  // Diese Nachricht wird IMMER an den Client gesendet, um User-Enumeration zu verhindern.
-  return { message: 'Wenn ein Account mit dieser Eingabe existiert, wurde eine E-Mail zum Zurücksetzen des Passworts gesendet.' };
+  // Immer gleich antworten!
+  return { email: emailToSendReset ? emailToSendReset : null };
 });
+
 
 // -----------------------------------------
 // 3. Benutzername zu E-Mail (optional, z. B. für Login mit Username)
@@ -259,7 +246,7 @@ exports.checkOrCreateInviteCode = functions.https.onCall(async (data, context) =
 });
 
 // -----------------------------------------
-// 7. Einladungscode prüfen + Herrchen-Vorschau + Verknüpfungs-Check
+// 7. Einladungscode prüfen + Herrchen-Vorschau + Verknüpfungs- und Pending-Check (NEU!)
 // -----------------------------------------
 exports.checkInviteCodeAndPreview = functions.https.onCall(async (data, context) => {
   function normalizeGender(gender) {
@@ -303,6 +290,17 @@ exports.checkInviteCodeAndPreview = functions.https.onCall(async (data, context)
   // Herrchen-Vorschau aufbauen
   const doggysSnap = await herrchenDoc.ref.collection('doggys').get();
 
+  // *** NEU: Prüfen ob eine Pending-Request Doggy <-> Herrchen existiert ***
+  const pendingSnap = await admin.firestore()
+    .collection('pendingRequests')
+    .where('doggyId', '==', doggyId)
+    .where('herrchenId', '==', herrchenId)
+    .where('status', '==', 'pending')
+    .limit(1)
+    .get();
+
+  const hasPendingRequest = !pendingSnap.empty;
+
   return {
     alreadyConnected, // bool
     herrchenId,
@@ -311,102 +309,317 @@ exports.checkInviteCodeAndPreview = functions.https.onCall(async (data, context)
     age: herrchen.age ?? null,
     gender: normalizeGender(herrchen.gender),
     doggyCount: doggysSnap.size,
+    hasPendingRequest,   // <-- NEU
   };
 });
 
 // -----------------------------------------
-// 8. Verbindungsanfrage: Doggy → Herrchen (Doggy schickt Anfrage)
+// 8. Zentrale Pending-Request: Doggy → Herrchen (Doggy schickt Anfrage) MIT COOLDOWN
 // -----------------------------------------
-exports.requestConnectionToHerrchen = functions.https.onCall(async (data, context) => {
-  const doggyId = context.auth?.uid;
-  const code = (data.code || '').trim();
+// -----------------------------------------
+// 8. Zentrale Pending-Request: Doggy → Herrchen (Doggy schickt Anfrage) MIT COOLDOWN & KOMPLETTER ANTWORT
+// -----------------------------------------
+exports.createPendingRequest = functions.https.onCall(async (data, context) => {
+  try {
+    const doggyId = context.auth?.uid;
+    const code = (data.code || '').trim();
+    console.log('[createPendingRequest] Eingeloggt:', doggyId, 'Code:', code);
 
-  if (!doggyId) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
-  if (!code) throw new functions.https.HttpsError('invalid-argument', 'Kein Einladungscode übergeben.');
+    if (!doggyId) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
+    if (!code) throw new functions.https.HttpsError('invalid-argument', 'Kein Einladungscode übergeben.');
 
-  // Herrchen suchen
-  const herrchenSnap = await admin.firestore()
-    .collection('users')
-    .where('einladungscode', '==', code)
-    .limit(1)
-    .get();
+    // Herrchen suchen
+    const herrchenSnap = await admin.firestore()
+      .collection('users')
+      .where('einladungscode', '==', code)
+      .limit(1)
+      .get();
+    console.log('[createPendingRequest] Herrchen gefunden?', !herrchenSnap.empty);
 
-  if (herrchenSnap.empty) throw new functions.https.HttpsError('not-found', 'Herrchen nicht gefunden.');
-  const herrchenDoc = herrchenSnap.docs[0];
-  const herrchenId = herrchenDoc.id;
+    if (herrchenSnap.empty) throw new functions.https.HttpsError('not-found', 'Herrchen nicht gefunden.');
+    const herrchenDoc = herrchenSnap.docs[0];
+    const herrchenId = herrchenDoc.id;
+    const herrchenData = herrchenDoc.data() || {};
 
-  // Prüfe, ob schon eine offene Anfrage existiert:
-  const requestRef = admin.firestore()
-    .collection('users').doc(herrchenId)
-    .collection('pendingDoggyRequests')
-    .doc(doggyId);
+    // COOLDOWN prüfen
+    const lastRejectedSnap = await admin.firestore().collection('pendingRequests')
+      .where('doggyId', '==', doggyId)
+      .where('herrchenId', '==', herrchenId)
+      .where('status', '==', 'rejected')
+      .orderBy('decidedAt', 'desc')
+      .limit(1)
+      .get();
+    console.log('[createPendingRequest] lastRejectedSnap size:', lastRejectedSnap.size);
 
-  if ((await requestRef.get()).exists) {
-    throw new functions.https.HttpsError('already-exists', 'Anfrage läuft bereits.');
+    if (!lastRejectedSnap.empty) {
+      const lastRejected = lastRejectedSnap.docs[0].data();
+      const cooldownDays = 7;
+      const now = Date.now();
+      const rejectedAt = lastRejected.decidedAt?.toDate?.().getTime?.();
+      console.log('[createPendingRequest] cooldownCheck:', { rejectedAt, now, diff: now - rejectedAt });
+      if (rejectedAt && ((now - rejectedAt) < cooldownDays * 24 * 60 * 60 * 1000)) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          `Du kannst frühestens ${cooldownDays} Tage nach Ablehnung eine neue Anfrage an dieses Herrchen stellen.`
+        );
+      }
+    }
+
+    // Prüfen, ob schon eine offene Anfrage zwischen diesen beiden läuft:
+    const requestId = `${doggyId}_${herrchenId}`;
+    const pendingRef = admin.firestore().collection('pendingRequests').doc(requestId);
+    if ((await pendingRef.get()).exists) {
+      console.warn('[createPendingRequest] Anfrage läuft bereits!');
+      throw new functions.https.HttpsError('already-exists', 'Es läuft bereits eine Anfrage zwischen dir und diesem Herrchen.');
+    }
+
+    // Premium-Status laden
+    const doggySnap = await admin.firestore().collection('users').doc(doggyId).get();
+    const doggyData = doggySnap.data() || {};
+    const isDoggyPremium = !!(doggyData.premium && doggyData.premium.doggy);
+    const isHerrchenPremium = !!(herrchenData.premium && herrchenData.premium.herrchen);
+
+    // Limite prüfen: Free-User dürfen nur EINE offene Anfrage / Verbindung haben!
+    const doggyPending = await admin.firestore().collection('pendingRequests')
+      .where('doggyId', '==', doggyId)
+      .where('status', '==', 'pending')
+      .get();
+    const doggyConnections = await admin.firestore().collection('users').doc(doggyId)
+      .collection('assignedHerrchen').get();
+    console.log('[createPendingRequest] isDoggyPremium:', isDoggyPremium, 'pending:', doggyPending.size, 'connections:', doggyConnections.size);
+
+    if (!isDoggyPremium && (doggyPending.size > 0 || doggyConnections.size > 0)) {
+      throw new functions.https.HttpsError('resource-exhausted', 'Nur ein Herrchen erlaubt (Upgrade auf Premium für mehrere Anfragen/Verbindungen möglich)');
+    }
+
+    // Limite prüfen: Herrchen-Seite
+    const herrchenPending = await admin.firestore().collection('pendingRequests')
+      .where('herrchenId', '==', herrchenId)
+      .where('status', '==', 'pending')
+      .get();
+    const herrchenConnections = await admin.firestore().collection('users').doc(herrchenId)
+      .collection('doggys').get();
+    console.log('[createPendingRequest] isHerrchenPremium:', isHerrchenPremium, 'pending:', herrchenPending.size, 'connections:', herrchenConnections.size);
+
+    if (!isHerrchenPremium && (herrchenPending.size > 0 || herrchenConnections.size > 0)) {
+      throw new functions.https.HttpsError('resource-exhausted', 'Dieses Herrchen kann nur eine Doggy-Anfrage/Verbindung haben (Premium nötig für mehr)');
+    }
+
+    // Anfrage anlegen!
+await pendingRef.set({
+  doggyId,
+  herrchenId,
+  doggyName: doggyData.benutzername ?? 'Unbekannt',
+  doggyAvatarUrl: doggyData.profileImageUrl ?? '',
+  herrchenName: herrchenData.benutzername ?? 'Unbekannt',
+  herrchenAvatarUrl: herrchenData.profileImageUrl ?? '',
+  requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+  status: 'pending',
+});
+    console.log('[createPendingRequest] Anfrage angelegt:', requestId);
+
+    // Herrchen-Infos für den Client zurückgeben:
+    return {
+      success: true,
+      herrchen: {
+        herrchenId,
+        benutzername: herrchenData.benutzername ?? 'Unbekannt',
+        profileImageUrl: herrchenData.profileImageUrl ?? null,
+        age: herrchenData.age ?? null,
+        gender: herrchenData.gender ?? null
+      }
+    };
+  } catch (e) {
+    console.error('[createPendingRequest] Fehler:', e);
+    throw new functions.https.HttpsError(e.code || 'internal', e.message || e.toString());
   }
+});
 
-  // Anfrage speichern, JETZT MIT herrchenId!
-  await requestRef.set({
-    doggyId,
-    herrchenId, // <<<<<<<<<<< HINZUGEFÜGT
-    requestedAt: admin.firestore.FieldValue.serverTimestamp(),
-    status: 'pending',
+
+
+// -----------------------------------------
+// 9. Zentrale Pending-Request zurückziehen (Doggy storniert eigene Anfrage)
+// -----------------------------------------
+exports.cancelPendingRequest = functions.https.onCall(async (data, context) => {
+  try {
+    const doggyId = context.auth?.uid;
+    const herrchenId = (data.herrchenId || '').trim();
+    console.log('[cancelPendingRequest] doggyId:', doggyId, 'herrchenId:', herrchenId);
+
+    if (!doggyId) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
+    if (!herrchenId) throw new functions.https.HttpsError('invalid-argument', 'Kein Herrchen angegeben.');
+
+    const requestId = `${doggyId}_${herrchenId}`;
+    const pendingRef = admin.firestore().collection('pendingRequests').doc(requestId);
+    const pendingDoc = await pendingRef.get();
+
+    if (!pendingDoc.exists) {
+      console.warn('[cancelPendingRequest] Anfrage nicht gefunden:', requestId);
+      throw new functions.https.HttpsError('not-found', 'Anfrage nicht gefunden.');
+    }
+
+    const dataPending = pendingDoc.data();
+    console.log('[cancelPendingRequest] Anfrage geladen:', dataPending);
+
+    if (dataPending.status !== 'pending') {
+      throw new functions.https.HttpsError('failed-precondition', 'Anfrage kann nicht mehr zurückgezogen werden.');
+    }
+    if (dataPending.doggyId !== doggyId) {
+      throw new functions.https.HttpsError('permission-denied', 'Du kannst nur deine eigenen Anfragen zurückziehen.');
+    }
+
+    await pendingRef.delete();
+    console.log('[cancelPendingRequest] Anfrage gelöscht:', requestId);
+
+    return { success: true };
+  } catch (e) {
+    console.error('[cancelPendingRequest] Fehler:', e);
+    throw new functions.https.HttpsError(e.code || 'internal', e.message || e.toString());
+  }
+});
+
+
+// -----------------------------------------
+// 10. Zentrale Pending-Request beantworten (Herrchen akzeptiert oder lehnt ab) – mit Status & Zeitstempel
+// -----------------------------------------
+exports.respondToPendingRequest = functions.https.onCall(async (data, context) => {
+  try {
+    const herrchenId = context.auth?.uid;
+    const doggyId = (data.doggyId || '').trim();
+    const accepted = !!data.accepted;
+    console.log('[respondToPendingRequest] herrchenId:', herrchenId, 'doggyId:', doggyId, 'accepted:', accepted);
+
+    if (!herrchenId) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
+    if (!doggyId) throw new functions.https.HttpsError('invalid-argument', 'Kein Doggy angegeben.');
+
+    const requestId = `${doggyId}_${herrchenId}`;
+    const pendingRef = admin.firestore().collection('pendingRequests').doc(requestId);
+    const pendingDoc = await pendingRef.get();
+
+    if (!pendingDoc.exists) {
+      console.warn('[respondToPendingRequest] Anfrage nicht gefunden:', requestId);
+      throw new functions.https.HttpsError('not-found', 'Anfrage nicht gefunden.');
+    }
+
+    const pendingData = pendingDoc.data();
+    console.log('[respondToPendingRequest] Anfrage geladen:', pendingData);
+
+    if (pendingData.status !== 'pending') {
+      throw new functions.https.HttpsError('failed-precondition', 'Anfrage ist nicht mehr offen.');
+    }
+    if (pendingData.herrchenId !== herrchenId) {
+      throw new functions.https.HttpsError('permission-denied', 'Du darfst nur Anfragen an dich selbst beantworten.');
+    }
+
+    if (accepted) {
+      // Premium-Status und Limits prüfen
+      const herrchenSnap = await admin.firestore().collection('users').doc(herrchenId).get();
+      const herrchenData = herrchenSnap.data() || {};
+      const isHerrchenPremium = !!herrchenData.premiumHerrchen;
+
+      const herrchenConnections = await admin.firestore().collection('users').doc(herrchenId)
+        .collection('doggys').get();
+
+      if (!isHerrchenPremium && herrchenConnections.size > 0) {
+        throw new functions.https.HttpsError('resource-exhausted', 'Nur ein Doggy erlaubt (Premium für mehrere Verbindungen nötig)');
+      }
+
+      const doggySnap = await admin.firestore().collection('users').doc(doggyId).get();
+      const doggyData = doggySnap.data() || {};
+      const isDoggyPremium = !!doggyData.premiumDoggy;
+      const doggyConnections = await admin.firestore().collection('users').doc(doggyId)
+        .collection('assignedHerrchen').get();
+
+      if (!isDoggyPremium && doggyConnections.size > 0) {
+        throw new functions.https.HttpsError('resource-exhausted', 'Dieses Doggy kann nur ein Herrchen haben (Premium nötig für mehr)');
+      }
+
+      await admin.firestore()
+        .collection('users')
+        .doc(herrchenId)
+        .collection('doggys')
+        .doc(doggyId)
+  .set({
+    uid: doggyId,
+    benutzername: doggyData.benutzername ?? 'Unbekannter Doggy',
+    verbundenAm: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  // (Optional: Benachrichtigung an Herrchen senden)
+      await admin.firestore()
+        .collection('users')
+        .doc(doggyId)
+        .collection('assignedHerrchen')
+        .doc(herrchenId)
+        .set({
+          name: herrchenData.benutzername ?? 'Unbekannt',
+          status: 'aktiv',
+          connectedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
 
-  return { success: true };
-});
+      await pendingRef.update({ status: 'accepted', decidedAt: admin.firestore.FieldValue.serverTimestamp() });
+      console.log('[respondToPendingRequest] Anfrage akzeptiert und Verbindung hergestellt!');
+    } else {
+      await pendingRef.update({ status: 'rejected', decidedAt: admin.firestore.FieldValue.serverTimestamp() });
+      console.log('[respondToPendingRequest] Anfrage abgelehnt.');
+    }
 
-
-// -----------------------------------------
-// 9. Herrchen bestätigt oder lehnt Doggy-Anfrage ab
-// -----------------------------------------
-exports.respondToDoggyRequest = functions.https.onCall(async (data, context) => {
-  const herrchenId = context.auth?.uid;
-  const doggyId = data.doggyId;
-  const accepted = data.accepted; // true = akzeptieren, false = ablehnen
-
-  if (!herrchenId) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
-  if (!doggyId) throw new functions.https.HttpsError('invalid-argument', 'Kein Doggy angegeben.');
-
-  const requestRef = admin.firestore()
-    .collection('users').doc(herrchenId)
-    .collection('pendingDoggyRequests')
-    .doc(doggyId);
-
-  const reqDoc = await requestRef.get();
-  if (!reqDoc.exists) throw new functions.https.HttpsError('not-found', 'Anfrage nicht gefunden.');
-
-  if (accepted) {
-    // Verbindung herstellen:
-    await admin.firestore()
-      .collection('users')
-      .doc(herrchenId)
-      .collection('doggys')
-      .doc(doggyId)
-      .set({
-        uid: doggyId,
-        verbundenAm: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-    await admin.firestore()
-      .collection('users')
-      .doc(doggyId)
-      .collection('assignedHerrchen')
-      .doc(herrchenId)
-      .set({
-        name: reqDoc.data().benutzername ?? 'Unbekannt', // Passe ggf. an!
-        status: 'aktiv',
-        connectedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-    // Anfrage auf "accepted" setzen
-    await requestRef.update({ status: 'accepted', decidedAt: admin.firestore.FieldValue.serverTimestamp() });
-  } else {
-    await requestRef.update({ status: 'rejected', decidedAt: admin.firestore.FieldValue.serverTimestamp() });
+    return { success: true };
+  } catch (e) {
+    console.error('[respondToPendingRequest] Fehler:', e);
+    throw new functions.https.HttpsError(e.code || 'internal', e.message || e.toString());
   }
-
-  return { success: true };
 });
+
+
+// -----------------------------------------
+// 11. Offene Pending-Request des eingeloggten Doggys abfragen (inkl. Herrchen-Infos)
+// -----------------------------------------
+exports.getOwnPendingRequest = functions.https.onCall(async (data, context) => {
+  try {
+    const doggyId = context.auth?.uid;
+    if (!doggyId) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
+    console.log('[getOwnPendingRequest] doggyId:', doggyId);
+
+    const pendingSnap = await admin.firestore().collection('pendingRequests')
+      .where('doggyId', '==', doggyId)
+      .where('status', '==', 'pending')
+      .limit(1)
+      .get();
+
+    console.log('[getOwnPendingRequest] pendingSnap.size:', pendingSnap.size);
+
+    if (pendingSnap.empty) return { pendingRequest: null };
+
+    const pendingData = pendingSnap.docs[0].data();
+    const herrchenId = pendingData.herrchenId;
+    const herrchenDoc = await admin.firestore().collection('users').doc(herrchenId).get();
+    const herrchen = herrchenDoc.exists ? herrchenDoc.data() : {};
+    console.log('[getOwnPendingRequest] Herrchen geladen:', herrchenId, herrchen.benutzername);
+
+    const response = {
+      pendingRequest: {
+        herrchenId,
+        herrchenName: herrchen.benutzername ?? 'Unbekannt',
+        profileImageUrl: herrchen.profileImageUrl ?? null,
+        age: herrchen.age ?? null,
+        gender: herrchen.gender ?? null,
+        requestedAt: pendingData.requestedAt,
+        status: pendingData.status,
+      }
+    };
+
+    console.log("[getOwnPendingRequest] Response:", response);
+    return response;
+  } catch (e) {
+    console.error('[getOwnPendingRequest] Fehler:', e);
+    throw new functions.https.HttpsError(e.code || 'internal', e.message || e.toString());
+  }
+});
+
+
+
+
+
+
+
 

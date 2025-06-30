@@ -3,7 +3,7 @@ description: Eine App für Aufgaben und Belohnungssysteme für Doggys 🐶 und H
 
 publish_to: 'none' # Dieses Projekt soll nicht im pub.dev veröffentlicht werden
 
-version: 0.0.35+2
+version: 0.0.385+2
 
 environment:
   sdk: ">=3.1.0 <4.0.0"
@@ -34,6 +34,8 @@ dependencies:
   intl: 0.20.2
   qr_flutter: ^4.0.0
   mobile_scanner: ^4.0.1
+  device_info_plus: ^10.1.0    # <-- nach oben verschoben!
+  universal_html: ^2.2.4  
 
   # UI / Material
   flutter_localizations:
@@ -45,6 +47,7 @@ dev_dependencies:
   flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.13.1
 
+
 flutter:
   uses-material-design: true
 
@@ -53,8 +56,9 @@ flutter:
     - assets/login_header.png
 
 
-flutter_icons:
+flutter_launcher_icons:
   android: true
   ios: false # falls du keine iOS-App baust, sonst true
-  adaptive_icon_background: "#8554b0"    # oder dein Lila als Hexfarbe
+  image_path: "assets/logo.png" # Wichtig: Füge auch diesen Pfad hinzu als Standard-Icon
+  adaptive_icon_background: "#00000000"
   adaptive_icon_foreground: "assets/icon.png"

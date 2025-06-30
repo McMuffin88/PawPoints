@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:pawpoints/doggyaufgabenform.dart';
+import '/doggyaufgabenform.dart';
 
 // ICON-MAP OBEN EINMALIG DEFINIEREN
 final Map<String, IconData> iconMap = {
@@ -256,9 +256,8 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
               margin: const EdgeInsets.symmetric(horizontal: 8),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                border: Border.all(color: selected ? Colors.blue : Colors.grey),
+                border: Border.all(color: Colors.transparent),
                 borderRadius: BorderRadius.circular(12),
-                color: selected ? Colors.blue.shade50 : Colors.grey.shade100,
               ),
               width: 120,
               child: Column(
@@ -274,7 +273,7 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
                         : null,
                   ),
                   const SizedBox(height: 8),
-                  Text(doggy['name'] ?? 'Unbenannt', textAlign: TextAlign.center),
+                  Text(doggy['benutzername'] ?? 'Unbenannt', textAlign: TextAlign.center),
                   if (doggy['age'] != null) Text('Alter: ${doggy['age']}'),
                   if (doggy['level'] != null) Text('Level: ${doggy['level']}'),
                 ],
@@ -301,7 +300,7 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
                 const SizedBox(height: 12),
                 TabBar(
                   controller: _tabController,
-                  labelColor: Theme.of(context).primaryColor,
+                  labelColor: Colors.white,
                   onTap: (index) => setState(() => _selectedTabIndex = index),
                   tabs: const [
                     Tab(text: 'Aufgaben'),

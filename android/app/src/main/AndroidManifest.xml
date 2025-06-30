@@ -12,7 +12,7 @@
 
 
     <application
-        android:label="pawpoints"
+        android:label="Pawpoints"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

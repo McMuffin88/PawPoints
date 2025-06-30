@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '/Drawer_Doggy/doggy_drawer.dart';
+import '/Start/update.dart';
 
 // ICON-MAP HINZUFÜGEN
 final Map<String, IconData> iconMap = {
@@ -31,13 +32,18 @@ class DoggyScreen extends StatefulWidget {
 class _DoggyScreenState extends State<DoggyScreen> {
   String _doggyName = 'Doggy';
 
-  @override
-  void initState() {
-    super.initState();
-    _loadDoggyFirebaseData();
-    _listenToPointChanges();
-    _setupFirebaseMessaging();
-  }
+@override
+void initState() {
+  super.initState();
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    InitService.runOncePerAppStart();
+  });
+
+  _loadDoggyFirebaseData();
+  _listenToPointChanges();
+  _setupFirebaseMessaging();
+}
 
   /// 1) Einmaliges Laden von Name, Bild und Punkten
   Future<void> _loadDoggyFirebaseData() async {

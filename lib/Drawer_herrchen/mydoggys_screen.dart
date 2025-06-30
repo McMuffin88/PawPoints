@@ -299,7 +299,7 @@ class _MyDoggysScreenState extends State<MyDoggysScreen> {
                             : null,
                         child: doggy['profileImageUrl'] == null ? const Icon(Icons.pets) : null,
                       ),
-                      title: Text(doggy['name'] ?? 'Unbenannter Doggy'),
+                      title: Text(doggy['benutzername'] ?? 'Unbenannter Doggy'),
                       subtitle: Text('Level: ${doggy['level'] ?? 1}'),
                       trailing: IconButton(
                         icon: const Icon(Icons.link_off, color: Colors.red),

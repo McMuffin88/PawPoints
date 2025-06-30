@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
-// 1. PROFIL-SCREEN IMPORTIEREN
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:intl/intl.dart';
-
 import 'herrchen_drawer.dart';
 import '../main.dart';
-// import '../Start/bottom_navigator.dart'; // This import is circular and not needed here as this is the file itself.
-
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
 
 InputDecoration customFieldDecoration(
     String label,
@@ -36,9 +34,8 @@ InputDecoration customFieldDecoration(
         ),
         focusedBorder: OutlineInputBorder(
             borderRadius: radius,
-            // Changed from Colors.brown to Colors.transparent when editing
             borderSide: BorderSide(
-                color: isEditing ? Colors.transparent : Colors.transparent, // Changed this line
+                color: isEditing ? Colors.transparent : Colors.transparent,
                 width: isEditing ? 1.5 : 0,
             ),
         ),
@@ -69,10 +66,15 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
     DateTime? _geburtsdatum;
     String? _selectedGender;
     String? _selectedFavoriteColor;
+    String? _favoriteColorSaved; // <- für gespeicherte Buttonfarbe
     String? _profileImageUrl;
 
     bool _isEditing = false;
     bool _isLoading = false;
+
+    // Diskret-Modus:
+    bool _diskretModus = false;
+    String? _diskretPinHash;
 
     final Map<String, Color> _colorMap = {
         'Rot': Colors.red,
@@ -87,6 +89,11 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
         'Grau': Colors.grey,
         'Braun': Colors.brown,
     };
+
+    Color get favoriteButtonColor =>
+        (_favoriteColorSaved != null && _colorMap[_favoriteColorSaved!] != null)
+            ? _colorMap[_favoriteColorSaved!]!
+            : Colors.brown;
 
     @override
     void initState() {
@@ -125,7 +132,12 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
                 }
                 _selectedGender = data['gender'];
                 _selectedFavoriteColor = data['favoriteColor'];
+                _favoriteColorSaved = data['favoriteColor'];
                 _profileImageUrl = data['profileImageUrl'];
+
+                // Diskret-Modus laden
+                _diskretModus = data['diskretModus'] ?? false;
+                _diskretPinHash = data['pinHash']; // <--- geändert
             }
         } catch (e) {
             if (context.mounted) {
@@ -209,7 +221,10 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
                 'gender': _selectedGender,
                 'favoriteColor': _selectedFavoriteColor,
             });
-            setState(() { _isEditing = false; });
+            setState(() {
+                _isEditing = false;
+                _favoriteColorSaved = _selectedFavoriteColor; // <-- Buttonfarbe erst nach Speichern übernehmen!
+            });
             if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Profil erfolgreich gespeichert!')),
@@ -294,32 +309,153 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
         }
     }
 
+    // ---------- DISKRET-MODUS-Logik analog Doggy ----------
+    Future<void> _showPinChangeDialog() async {
+        final oldPinController = TextEditingController();
+        final newPinController = TextEditingController();
+
+        await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+                title: const Text('PIN ändern'),
+                content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                        if (_diskretPinHash != null)
+                            TextField(
+                                controller: oldPinController,
+                                obscureText: true,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                    labelText: 'Aktueller PIN',
+                                    hintText: 'Bitte alten PIN eingeben',
+                                ),
+                            ),
+                        if (_diskretPinHash != null)
+                            const SizedBox(height: 16),
+                        TextField(
+                            controller: newPinController,
+                            obscureText: true,
+                            keyboardType: TextInputType.number,
+                            maxLength: 8,
+                            decoration: const InputDecoration(
+                                labelText: 'Neuer PIN',
+                                hintText: 'Mindestens 6 Ziffern',
+                                counterText: '',
+                            ),
+                        ),
+                    ],
+                ),
+                actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Abbrechen'),
+                    ),
+                    ElevatedButton(
+                        onPressed: () async {
+                            if (newPinController.text.length < 6) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Der neue PIN muss mindestens 6 Ziffern lang sein.')),
+                                );
+                                return;
+                            }
+                            if (_diskretPinHash != null) {
+                                String oldHash = sha256.convert(utf8.encode(oldPinController.text)).toString();
+                                if (oldPinController.text.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Bitte den aktuellen PIN eingeben.')),
+                                    );
+                                    return;
+                                }
+                                if (oldHash != _diskretPinHash) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Der aktuelle PIN ist falsch!')),
+                                    );
+                                    return;
+                                }
+                            }
+                            String newHash = sha256.convert(utf8.encode(newPinController.text)).toString();
+                            final user = FirebaseAuth.instance.currentUser;
+                            if (user != null) {
+                                await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                                    'pinHash': newHash, // geändert
+                                    'diskretModus': true,
+                                });
+                                setState(() {
+                                    _diskretPinHash = newHash;
+                                    _diskretModus = true;
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('PIN erfolgreich geändert!')),
+                                );
+                            }
+                            Navigator.pop(context);
+                        },
+                        child: const Text('Bestätigen'),
+                    ),
+                ],
+            ),
+        );
+    }
+
+    Future<bool> _showDisablePinDialog() async {
+        final oldPinController = TextEditingController();
+        bool ok = false;
+
+        await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+                title: const Text('Diskret-Modus deaktivieren'),
+                content: TextField(
+                    controller: oldPinController,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                        labelText: 'PIN eingeben',
+                        hintText: 'Gib deinen aktuellen PIN ein',
+                    ),
+                ),
+                actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Abbrechen'),
+                    ),
+                    ElevatedButton(
+                        onPressed: () {
+                            if (oldPinController.text.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Bitte den aktuellen PIN eingeben!')),
+                                );
+                                return;
+                            }
+                            String hash = sha256.convert(utf8.encode(oldPinController.text)).toString();
+                            if (hash != _diskretPinHash) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('PIN falsch!')),
+                                );
+                                return;
+                            }
+                            ok = true;
+                            Navigator.pop(context);
+                        },
+                        child: const Text('Deaktivieren'),
+                    ),
+                ],
+            ),
+        );
+        return ok;
+    }
+
     @override
     Widget build(BuildContext context) {
         return Scaffold(
             key: _scaffoldKey,
+            extendBodyBehindAppBar: true,
             appBar: AppBar(
-                title: const Text('Profil bearbeiten (Herrchen)'),
-                // Set the background color to transparent
-                backgroundColor: Colors.transparent, // Changed this line
-                elevation: 0, // Remove shadow under the app bar
-                actions: [
-                    if (!_isEditing)
-                        IconButton(
-                            icon: const Icon(Icons.edit),
-                            onPressed: () => setState(() => _isEditing = true),
-                        ),
-                    if (_isEditing)
-                        IconButton(
-                            icon: _isLoading
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : const Icon(Icons.save),
-                            onPressed: _isLoading ? null : _saveProfile,
-                        ),
-                ],
+                title: const Text('Profil bearbeiten (Herrchen)', style: TextStyle(color: Colors.white)),
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                iconTheme: const IconThemeData(color: Colors.white),
             ),
             drawer: buildHerrchenDrawer(context, () {}, []),
             body: _isLoading && !_isEditing
@@ -475,7 +611,11 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
                                         ),
                                     );
                                 }).toList(),
-                                onChanged: _isEditing ? (value) => setState(() => _selectedFavoriteColor = value) : null,
+                                onChanged: _isEditing
+                                    ? (value) => setState(() {
+                                        _selectedFavoriteColor = value;
+                                    })
+                                    : null,
                                 decoration: customFieldDecoration(
                                     'Lieblingsfarbe',
                                     _isEditing,
@@ -492,7 +632,7 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
                                                     borderRadius: BorderRadius.circular(4),
                                                 ),
                                             ),
-                                          )
+                                        )
                                         : null,
                                 ),
                                 hint: const Text('Wähle deine Lieblingsfarbe', style: TextStyle(color: Colors.white)),
@@ -500,6 +640,159 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
                                 dropdownColor: Colors.black,
                             ),
                             const SizedBox(height: 24),
+
+                            // DISKRET-MODUS SWITCH + PIN ändern ICON
+                            Row(
+                                children: [
+                                    Expanded(
+                                        child: SwitchListTile(
+                                            title: const Text('Diskret-Modus', style: TextStyle(color: Colors.white)),
+                                            value: _diskretModus,
+                                            onChanged: !_isEditing
+                                                ? null
+                                                : (val) async {
+                                                    if (!val) {
+                                                        // Nur beim Ausschalten: PIN-Abfrage!
+                                                        if (_diskretPinHash != null) {
+                                                            bool ok = await _showDisablePinDialog();
+                                                            if (ok) {
+                                                                setState(() {
+                                                                    _diskretModus = false;
+                                                                    _diskretPinHash = null;
+                                                                });
+                                                                final user = FirebaseAuth.instance.currentUser;
+                                                                if (user != null) {
+                                                                    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                                                                        'diskretModus': false,
+                                                                        'pinHash': null, // geändert
+                                                                    });
+                                                                }
+                                                            }
+                                                        } else {
+                                                            setState(() { _diskretModus = false; });
+                                                            final user = FirebaseAuth.instance.currentUser;
+                                                            if (user != null) {
+                                                                await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                                                                    'diskretModus': false,
+                                                                    'pinHash': null, // geändert
+                                                                });
+                                                            }
+                                                        }
+                                                    } else {
+                                                        // Beim Aktivieren des Diskret-Modus immer PIN festlegen!
+                                                        final TextEditingController newPinController = TextEditingController();
+                                                        final result = await showDialog(
+                                                            context: context,
+                                                            builder: (context) => AlertDialog(
+                                                                title: const Text('PIN festlegen'),
+                                                                content: TextField(
+                                                                    controller: newPinController,
+                                                                    obscureText: true,
+                                                                    keyboardType: TextInputType.number,
+                                                                    maxLength: 8,
+                                                                    decoration: const InputDecoration(
+                                                                        labelText: 'Neuer PIN',
+                                                                        hintText: 'Mindestens 6 Ziffern',
+                                                                        counterText: '',
+                                                                    ),
+                                                                ),
+                                                                actions: [
+                                                                    TextButton(
+                                                                        onPressed: () => Navigator.pop(context, false),
+                                                                        child: const Text('Abbrechen'),
+                                                                    ),
+                                                                    ElevatedButton(
+                                                                        onPressed: () {
+                                                                            if (newPinController.text.length < 6) {
+                                                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                                                    const SnackBar(content: Text('Die PIN muss mindestens 6 Ziffern lang sein.')),
+                                                                                );
+                                                                                return;
+                                                                            }
+                                                                            Navigator.pop(context, true);
+                                                                        },
+                                                                        child: const Text('Festlegen'),
+                                                                    ),
+                                                                ],
+                                                            ),
+                                                        );
+                                                        if (result == true && newPinController.text.length >= 6) {
+                                                            final String newHash = sha256.convert(utf8.encode(newPinController.text)).toString();
+                                                            setState(() {
+                                                                _diskretModus = true;
+                                                                _diskretPinHash = newHash;
+                                                            });
+                                                            final user = FirebaseAuth.instance.currentUser;
+                                                            if (user != null) {
+                                                                await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                                                                    'diskretModus': true,
+                                                                    'pinHash': newHash, // geändert
+                                                                });
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                        ),
+                                    ),
+                                    if (_diskretModus && _isEditing)
+                                        IconButton(
+                                            icon: const Icon(Icons.edit, color: Colors.white),
+                                            tooltip: 'PIN ändern',
+                                            onPressed: _showPinChangeDialog,
+                                        ),
+                                ],
+                            ),
+                            const SizedBox(height: 32),
+
+                            // Bearbeiten/Speichern/Abbrechen Button-Logik
+                            if (!_isEditing)
+                                ElevatedButton(
+                                    onPressed: () => setState(() => _isEditing = true),
+                                    style: ElevatedButton.styleFrom(
+                                        minimumSize: const Size.fromHeight(48),
+                                        backgroundColor: favoriteButtonColor,
+                                        textStyle: const TextStyle(fontSize: 18),
+                                    ),
+                                    child: const Text('Bearbeiten'),
+                                )
+                            else
+                                Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                        ElevatedButton(
+                                            onPressed: _isLoading ? null : _saveProfile,
+                                            style: ElevatedButton.styleFrom(
+                                                backgroundColor: favoriteButtonColor,
+                                                minimumSize: const Size(120, 48),
+                                                textStyle: const TextStyle(fontSize: 18),
+                                            ),
+                                            child: _isLoading
+                                                ? const SizedBox(
+                                                    width: 18,
+                                                    height: 18,
+                                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                                )
+                                                : const Text('Speichern'),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        OutlinedButton(
+                                            onPressed: _isLoading
+                                                ? null
+                                                : () {
+                                                    setState(() {
+                                                        _isEditing = false;
+                                                    });
+                                                    _loadProfileFromFirestore();
+                                                },
+                                            style: OutlinedButton.styleFrom(
+                                                minimumSize: const Size(120, 48),
+                                                textStyle: const TextStyle(fontSize: 18),
+                                            ),
+                                            child: const Text('Abbrechen'),
+                                        ),
+                                    ],
+                                ),
+                            const SizedBox(height: 32),
                             TextButton(
                                 onPressed: _deleteProfile,
                                 child: const Text('Profil löschen', style: TextStyle(color: Colors.red)),

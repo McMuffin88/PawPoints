@@ -1121,78 +1121,101 @@ class _LoginFormState extends State<LoginForm> {
     setState(() => _loading = false);
   }
 
-  // MARK: - Passwort vergessen Funktion (Serverless-Ansatz)
-  void _showForgotPasswordDialog() async {
-    final inputController = TextEditingController(text: _loginInput.text.trim());
+ void _showForgotPasswordDialog() async {
+  print("DEBUG: Passwort vergessen Dialog wurde geöffnet"); // Start
 
-    final enteredValue = await showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Passwort zurücksetzen'),
-          content: TextField(
-            controller: inputController,
-            decoration: const InputDecoration(
-              labelText: 'Benutzername oder E-Mail',
-              hintText: 'Gib deinen registrierten Benutzernamen oder E-Mail ein',
-            ),
-            keyboardType: TextInputType.text, // Kann Text oder E-Mail sein
+  final inputController = TextEditingController(text: _loginInput.text.trim());
+
+  final enteredValue = await showDialog<String>(
+    context: context,
+    builder: (ctx) {
+      return AlertDialog(
+        title: const Text('Passwort zurücksetzen'),
+        content: TextField(
+          controller: inputController,
+          decoration: const InputDecoration(
+            labelText: 'Benutzername oder E-Mail',
+            hintText: 'Gib deinen registrierten Benutzernamen oder E-Mail ein',
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Abbrechen'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(ctx).pop(inputController.text.trim());
-              },
-              child: const Text('Senden'),
-            ),
-          ],
-        );
-      },
+          keyboardType: TextInputType.text,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              print("DEBUG: Abbrechen gedrückt!");
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              print("DEBUG: Senden gedrückt, Wert: ${inputController.text.trim()}");
+              Navigator.of(ctx).pop(inputController.text.trim());
+            },
+            child: const Text('Senden'),
+          ),
+        ],
+      );
+    },
+  );
+
+  print("DEBUG: Wert aus Dialog: $enteredValue");
+
+  if (enteredValue == null || enteredValue.isEmpty) {
+    print("DEBUG: Keine Eingabe gemacht!");
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Eingabe wurde nicht gemacht.')),
     );
-
-    if (enteredValue == null || enteredValue.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Eingabe wurde nicht gemacht.')),
-      );
-      return;
-    }
-
-    setState(() => _loading = true);
-    try {
-      // Aufruf der Cloud Function 'sendPasswordResetByUsernameOrEmail'
-      // Diese Funktion muss die Logik enthalten, um zu erkennen, ob es eine E-Mail oder ein Benutzername ist,
-      // die entsprechende E-Mail-Adresse zu finden und dann die Reset-E-Mail zu senden.
-      await FirebaseFunctions.instance
-          .httpsCallable('sendPasswordResetByUsernameOrEmail')
-          .call({'identifier': enteredValue}); // 'identifier' kann Benutzername oder E-Mail sein
-
-      // Die Cloud Function gibt immer die gleiche Nachricht zurück, um User Enumeration zu verhindern.
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Wenn ein Account mit dieser Eingabe existiert, wurde eine E-Mail zum Zurücksetzen des Passworts gesendet.')),
-      );
-    } on FirebaseFunctionsException catch (e) {
-      // Auch hier die gleiche generische Nachricht für den Benutzer
-      print('Cloud Function Error (Password Reset): ${e.code} - ${e.message}'); // Für Debugging im Log
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Beim Zurücksetzen des Passworts ist ein Fehler aufgetreten. Bitte versuche es später erneut.')),
-      );
-    } catch (e) {
-      print('Unerwarteter Fehler (Password Reset): $e'); // Für Debugging im Log
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es später erneut.')),
-      );
-    }
-    if (!mounted) return;
-    setState(() => _loading = false);
+    return;
   }
 
+  setState(() => _loading = true);
+  try {
+    print("DEBUG: Cloud Function wird aufgerufen mit identifier: $enteredValue");
+    final callable = FirebaseFunctions.instance.httpsCallable('sendPasswordResetByUsernameOrEmail');
+    final response = await callable.call({'identifier': enteredValue});
+    print("DEBUG: Cloud Function Response: $response");
+
+    final foundEmail = response.data['email'];
+    if (foundEmail != null) {
+      print("DEBUG: Email gefunden, sende offizielle Passwort-Reset-Mail über FirebaseAuth");
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: foundEmail);
+    } else {
+      print("DEBUG: Keine E-Mail gefunden (User-Enumeration wird trotzdem nicht angezeigt).");
+    }
+
+    // IMMER gleiche Meldung anzeigen!
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Wenn ein Account mit dieser Eingabe existiert, wurde eine E-Mail zum Zurücksetzen des Passworts gesendet.'),
+      ),
+    );
+  } on FirebaseFunctionsException catch (e) {
+    print('DEBUG: Cloud Function Error (Password Reset): ${e.code} - ${e.message}');
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Beim Zurücksetzen des Passworts ist ein Fehler aufgetreten. Bitte versuche es später erneut.'),
+      ),
+    );
+  } on FirebaseAuthException catch (e) {
+    print('DEBUG: FirebaseAuth Error (Password Reset): ${e.code} - ${e.message}');
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Ein technischer Fehler ist aufgetreten. Bitte versuche es später erneut.'),
+      ),
+    );
+  } catch (e) {
+    print('DEBUG: Unerwarteter Fehler (Password Reset): $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es später erneut.'),
+      ),
+    );
+  }
+  if (!mounted) return;
+  setState(() => _loading = false);
+  print("DEBUG: Passwort vergessen Ablauf beendet!");
+}
 
   @override
   Widget build(BuildContext context) {
