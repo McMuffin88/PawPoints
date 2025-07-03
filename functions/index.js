@@ -515,7 +515,8 @@ exports.respondToPendingRequest = functions.https.onCall(async (data, context) =
       // Premium-Status und Limits prüfen
       const herrchenSnap = await admin.firestore().collection('users').doc(herrchenId).get();
       const herrchenData = herrchenSnap.data() || {};
-      const isHerrchenPremium = !!herrchenData.premiumHerrchen;
+      const isHerrchenPremium = !!(herrchenData.premium && herrchenData.premium.herrchen);
+
 
       const herrchenConnections = await admin.firestore().collection('users').doc(herrchenId)
         .collection('doggys').get();
@@ -526,7 +527,7 @@ exports.respondToPendingRequest = functions.https.onCall(async (data, context) =
 
       const doggySnap = await admin.firestore().collection('users').doc(doggyId).get();
       const doggyData = doggySnap.data() || {};
-      const isDoggyPremium = !!doggyData.premiumDoggy;
+      const isDoggyPremium = !!(doggyData.premium && doggyData.premium.doggy);
       const doggyConnections = await admin.firestore().collection('users').doc(doggyId)
         .collection('assignedHerrchen').get();
 
@@ -542,6 +543,7 @@ exports.respondToPendingRequest = functions.https.onCall(async (data, context) =
   .set({
     uid: doggyId,
     benutzername: doggyData.benutzername ?? 'Unbekannter Doggy',
+    profileImageUrl: doggyData.profileImageUrl ?? '',
     verbundenAm: admin.firestore.FieldValue.serverTimestamp(),
   });
 

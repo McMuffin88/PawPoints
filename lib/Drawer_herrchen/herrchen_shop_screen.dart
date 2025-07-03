@@ -239,15 +239,15 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
     );
   }
 
-  Widget _buildDoggySelector() {
-    return SizedBox(
-      height: 130,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        itemCount: _doggys.length,
-        itemBuilder: (context, index) {
-          final doggy = _doggys[index];
+Widget _buildDoggySelector() {
+  return SizedBox(
+    height: 130,
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: _doggys.map((doggy) {
           final selected = doggy['id'] == _selectedDoggy;
 
           return GestureDetector(
@@ -280,10 +280,12 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
               ),
             ),
           );
-        },
+        }).toList(),
       ),
-    );
-  }
+    ),
+  );
+}
+
 
   @override
   Widget build(BuildContext context) {

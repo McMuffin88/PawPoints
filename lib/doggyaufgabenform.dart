@@ -154,7 +154,7 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                       items: doggys
                           .map((doggy) => DropdownMenuItem<String>(
                         value: doggy['id'],
-                        child: Text(doggy['name'] ?? 'Unbenannt'),
+                        child: Text(doggy['benutzername'] ?? 'Unbenannt'),
                       ))
                           .toList(),
                     ),
@@ -167,14 +167,17 @@ class DoggyTaskShopAddButton extends StatelessWidget {
                           .map((cat) => DropdownMenuItem<String>(value: cat, child: Text(cat)))
                           .toList(),
                     ),
-                    TextField(
-                      controller: titleController,
-                      decoration: const InputDecoration(labelText: 'Titel'),
-                    ),
-                    TextField(
-                      controller: descriptionController,
-                      decoration: const InputDecoration(labelText: 'Beschreibung'),
-                    ),
+TextField(
+  controller: titleController,
+  decoration: const InputDecoration(labelText: 'Titel'),
+),
+const SizedBox(height: 16), // Abstand
+
+TextField(
+  controller: descriptionController,
+  decoration: const InputDecoration(labelText: 'Beschreibung'),
+),
+const SizedBox(height: 16), // Abstand
 
                     if (selectedCategory == 'Belohnung') ...[
                       TextField(

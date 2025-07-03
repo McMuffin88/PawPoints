@@ -176,8 +176,26 @@ class _FeedbackOrSupportScreenState extends State<FeedbackOrSupportScreen> {
         description.toLowerCase().contains(feature.toLowerCase()));
   }
 
+  Future<int> _getNextBugNumber() async {
+    print("Frage höchste Bugnummer ab...");
+    final query = await FirebaseFirestore.instance
+        .collection('feedback')
+        .orderBy('bugNumber', descending: true)
+        .limit(1)
+        .get();
+    if (query.docs.isEmpty) {
+      print("Noch keine Bugs vorhanden, setze bugNumber auf 1.");
+      return 1;
+    }
+    final maxNum = query.docs.first['bugNumber'] ?? 0;
+    print("Höchste gefundene bugNumber: $maxNum");
+    return (maxNum as int) + 1;
+  }
+
   Future<void> _sendFeedback() async {
+    print("Starte Bug-Absenden...");
     if (category == null || messageController.text.trim().isEmpty) {
+      print("Kategorie oder Nachricht fehlt!");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Bitte Rubrik wählen und eine Nachricht eingeben.')),
       );
@@ -187,6 +205,7 @@ class _FeedbackOrSupportScreenState extends State<FeedbackOrSupportScreen> {
     final msg = messageController.text.trim();
 
     if (await _isDuplicateFeedback(category!, msg)) {
+      print("Feedback bereits vorhanden!");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Dieser Fehler wurde bereits gemeldet. Vielen Dank!')),
       );
@@ -194,6 +213,7 @@ class _FeedbackOrSupportScreenState extends State<FeedbackOrSupportScreen> {
     }
 
     if (_isPlannedFeature(msg)) {
+      print("Feature ist bereits geplant!");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(
           'Diese Funktion ist in dieser Alpha-Version noch nicht verfügbar.\nSchau in die Roadmap!',
@@ -211,17 +231,41 @@ class _FeedbackOrSupportScreenState extends State<FeedbackOrSupportScreen> {
       screenshotUrl = await _uploadScreenshot(screenshot!);
     }
 
-    await FirebaseFirestore.instance.collection('feedback').add({
-      'severity': severity,
-      'category': category,
-      'message': msg,
-      'appVersion': appVersion,
-      'os': os,
-      'deviceInfo': deviceInfo,
-      'screenshotUrl': screenshotUrl,
-      'timestamp': FieldValue.serverTimestamp(),
-      'status': 'offen',
-    });
+    int bugNumber = 0;
+    try {
+      bugNumber = await _getNextBugNumber();
+      print("Vergabene bugNumber: $bugNumber");
+    } catch (e) {
+      print("FEHLER beim Bugnummer-Lesen: $e");
+      bugNumber = 1;
+    }
+
+    print("Sende Bug an Firestore...");
+    try {
+      await FirebaseFirestore.instance.collection('feedback').add({
+        'bugNumber': bugNumber,
+        'severity': severity,
+        'category': category,
+        'message': msg,
+        'appVersion': appVersion,
+        'os': os,
+        'deviceInfo': deviceInfo,
+        'screenshotUrl': screenshotUrl,
+        'timestamp': FieldValue.serverTimestamp(),
+        'status': 'offen',
+      });
+      print("Firestore-Schreiben erfolgreich!");
+    } catch (e, stack) {
+      print("FEHLER beim Schreiben in Firestore: $e");
+      print(stack);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Fehler beim Schreiben in Firestore: $e")),
+      );
+      setState(() {
+        isSending = false;
+      });
+      return;
+    }
 
     setState(() {
       isSending = false;
@@ -231,7 +275,6 @@ class _FeedbackOrSupportScreenState extends State<FeedbackOrSupportScreen> {
       severity = 3;
     });
 
-    // Bestätigung und Weiterleitung zur Bug-Übersicht
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -241,7 +284,7 @@ class _FeedbackOrSupportScreenState extends State<FeedbackOrSupportScreen> {
       ),
     );
     await Future.delayed(const Duration(seconds: 2));
-    Navigator.of(context).pop(); // schließt Dialog
+    Navigator.of(context).pop();
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (context) => const BugListScreen()),
     );
@@ -264,61 +307,60 @@ class _FeedbackOrSupportScreenState extends State<FeedbackOrSupportScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
-Center(
-  child: Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      ElevatedButton.icon(
-        icon: const Icon(Icons.list_alt),
-        label: const Text("Gemeldete Bugs ansehen"),
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => const BugListScreen()),
-          );
-        },
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-      ),
-      const SizedBox(height: 16),
-      ElevatedButton.icon(
-        icon: const Icon(Icons.bug_report),
-        label: const Text("Feedback / Bug melden"),
-        onPressed: () {
-          setState(() {
-            selectedMode = 'feedback';
-          });
-        },
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-      ),
-      const SizedBox(height: 16),
-      ElevatedButton.icon(
-        icon: const Icon(Icons.support_agent),
-        label: const Text("Support (Chat)"),
-        onPressed: () {
-          setState(() {
-            selectedMode = 'support';
-          });
-        },
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-      ),
-    ],
-  ),
-),
-
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.list_alt),
+                            label: const Text("Gemeldete Bugs ansehen"),
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(builder: (context) => const BugListScreen()),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.bug_report),
+                            label: const Text("Feedback / Bug melden"),
+                            onPressed: () {
+                              setState(() {
+                                selectedMode = 'feedback';
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.support_agent),
+                            label: const Text("Support (Chat)"),
+                            onPressed: () {
+                              setState(() {
+                                selectedMode = 'support';
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               )
@@ -558,9 +600,24 @@ class BugListScreen extends StatelessWidget {
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: ListTile(
-                  leading: Text(
-                    data['severity'] != null ? "⚡️${data['severity']}" : "⚡️?",
-                    style: const TextStyle(fontSize: 20),
+                  leading: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        data['bugNumber'] != null
+                            ? "#${data['bugNumber']}"
+                            : "?",
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        data['severity'] != null
+                            ? "⚡️${data['severity']}"
+                            : "⚡️?",
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ],
                   ),
                   title: Text(
                     data['category'] ?? "Unbekannt",
@@ -578,7 +635,8 @@ class BugListScreen extends StatelessWidget {
                         children: [
                           Text(
                             "${data['appVersion'] ?? ''} | ${data['os'] ?? ''} ${data['deviceInfo'] ?? ''}",
-                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.grey),
                           ),
                         ],
                       ),
@@ -590,7 +648,8 @@ class BugListScreen extends StatelessWidget {
                             style: const TextStyle(fontSize: 12),
                           ),
                         ),
-                      if (data['screenshotUrl'] != null && data['screenshotUrl'] != '')
+                      if (data['screenshotUrl'] != null &&
+                          data['screenshotUrl'] != '')
                         Padding(
                           padding: const EdgeInsets.only(top: 4.0),
                           child: GestureDetector(

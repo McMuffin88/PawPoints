@@ -32,18 +32,18 @@ class DoggyScreen extends StatefulWidget {
 class _DoggyScreenState extends State<DoggyScreen> {
   String _doggyName = 'Doggy';
 
-@override
-void initState() {
-  super.initState();
+  @override
+  void initState() {
+    super.initState();
 
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    InitService.runOncePerAppStart();
-  });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      InitService.runOncePerAppStart();
+    });
 
-  _loadDoggyFirebaseData();
-  _listenToPointChanges();
-  _setupFirebaseMessaging();
-}
+    _loadDoggyFirebaseData();
+    _listenToPointChanges();
+    _setupFirebaseMessaging();
+  }
 
   /// 1) Einmaliges Laden von Name, Bild und Punkten
   Future<void> _loadDoggyFirebaseData() async {
@@ -217,14 +217,38 @@ void initState() {
 
         for (var doc in docs) {
           final data = doc.data()! as Map<String, dynamic>;
-          final due = DateTime.tryParse(data['due'] ?? '');
-          if (due == null) continue;
+          final dueDate = DateTime.tryParse(data['due'] ?? '');
+          final dueTimeStr = data['dueTime'] as String?;
+
+          DateTime? fullDateTime;
+          if (dueDate != null) {
+            if (dueTimeStr != null) {
+              final timeParts = dueTimeStr.split(':');
+              if (timeParts.length == 2) {
+                final hour = int.tryParse(timeParts[0]) ?? 0;
+                final minute = int.tryParse(timeParts[1]) ?? 0;
+                fullDateTime = DateTime(
+                  dueDate.year,
+                  dueDate.month,
+                  dueDate.day,
+                  hour,
+                  minute,
+                );
+              } else {
+                fullDateTime = dueDate;
+              }
+            } else {
+              fullDateTime = dueDate;
+            }
+          }
+          if (fullDateTime == null) continue;
+
           final repeat = data['repeat'];
           if (repeat == null) {
-            if (due.isAfter(cutoffDate))
-              instances.add({'doc': doc, 'date': due});
+            if (fullDateTime.isAfter(cutoffDate))
+              instances.add({'doc': doc, 'date': fullDateTime});
           } else {
-            var current = due;
+            var current = fullDateTime;
             while (current.isBefore(endBoundary)) {
               if (current.isBefore(cutoffDate)) {
                 break;
@@ -246,7 +270,7 @@ void initState() {
         }
 
         instances
-            .sort((a, b) => (a['date'] as DateTime).compareTo(b['date'] as DateTime));
+            .sort((a, b) => (a['date'] as DateTime).compareTo(a['date'] as DateTime));
         return Column(
           children: [
             Padding(

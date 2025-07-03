@@ -541,9 +541,7 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
-      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Profil bearbeiten (Doggy)', style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),

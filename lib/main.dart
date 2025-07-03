@@ -25,6 +25,10 @@ import 'package:dio/dio.dart';
 import 'package:open_file/open_file.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
+import '../Settings/schriftgroesse_provider.dart'; // Pfad ggf. anpassen!
+import 'package:provider/provider.dart';
+import 'Settings/theme_provider.dart';
+
 // import 'package:http/http.dart' as http; // Nicht mehr benötigt, da HttpHeaders.authorizationHeader entfernt wird
 
 
@@ -36,7 +40,15 @@ void main() async {
     await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
   }
 
-  runApp(const PawPointsApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => SchriftgroesseProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+      ],
+      child: const PawPointsApp(),
+    ),
+  );
 }
 
 
@@ -89,62 +101,110 @@ class _PawPointsAppState extends State<PawPointsApp> {
     _themeColorStreamController.add(newColor);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'PawPoints',
-      theme: ThemeData.dark(useMaterial3: true).copyWith(
-        colorScheme: ColorScheme.dark(
-          primary: _currentThemeColor, // Dynamische Primärfarbe
-          secondary: (_currentThemeColor is MaterialColor)
-              ? (_currentThemeColor as MaterialColor).shade700
-              : Colors.grey, // Robuster Fallback
-          onPrimary: Colors.black,
-          surface: const Color(0xFF1E1E1E),
-          onSurface: Colors.white70,
+@override
+Widget build(BuildContext context) {
+  final themeProvider = Provider.of<ThemeProvider>(context);
+
+  // Deine zentrale Theme-Farbe
+  final primaryColor = _currentThemeColor;
+
+  return MaterialApp(
+    debugShowCheckedModeBanner: false,
+    title: 'PawPoints',
+    theme: ThemeData.light(useMaterial3: true).copyWith(
+      colorScheme: ColorScheme.light(
+        primary: primaryColor,
+        secondary: (primaryColor is MaterialColor)
+            ? (primaryColor as MaterialColor).shade700
+            : Colors.grey,
+        onPrimary: Colors.black,
+        surface: const Color(0xFFF7F7F7),
+        onSurface: Colors.black87,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.black12,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(24),
+          borderSide: BorderSide.none,
         ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white10,
-          border: OutlineInputBorder(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        hintStyle: const TextStyle(color: Colors.black45),
+        labelStyle: const TextStyle(color: Colors.black87),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryColor,
+          foregroundColor: Colors.black,
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
-            borderSide: BorderSide.none,
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          hintStyle: const TextStyle(color: Colors.white54),
-          labelStyle: const TextStyle(color: Colors.white70),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _currentThemeColor, // Dynamische Button-Farbe
-            foregroundColor: Colors.black,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-        ),
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            foregroundColor: _currentThemeColor, // Dynamische TextButton-Farbe
-            textStyle: const TextStyle(fontWeight: FontWeight.bold),
-          ),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ),
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('de'),
-        Locale('en'),
-      ],
-      home: const AuthWrapper(),
-    );
-  }
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: primaryColor,
+          textStyle: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
+      // Weitere helle Theme-Einstellungen falls gewünscht ...
+    ),
+    darkTheme: ThemeData.dark(useMaterial3: true).copyWith(
+      colorScheme: ColorScheme.dark(
+        primary: primaryColor,
+        secondary: (primaryColor is MaterialColor)
+            ? (primaryColor as MaterialColor).shade700
+            : Colors.grey,
+        onPrimary: Colors.black,
+        surface: const Color(0xFF1E1E1E),
+        onSurface: Colors.white70,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white10,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(24),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        hintStyle: const TextStyle(color: Colors.white54),
+        labelStyle: const TextStyle(color: Colors.white70),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryColor,
+          foregroundColor: Colors.black,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: primaryColor,
+          textStyle: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
+      // Weitere dunkle Theme-Einstellungen falls gewünscht ...
+    ),
+    themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+    localizationsDelegates: const [
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: const [
+      Locale('de'),
+      Locale('en'),
+    ],
+    home: const AuthWrapper(),
+  );
+}
+
 }
 
 class AuthWrapper extends StatefulWidget {
@@ -1608,6 +1668,7 @@ class ProfileForm extends StatefulWidget {
   final List<String> requiredFields;
   final Map<String, Color> colorOptions; // Neue Property für Farboptionen
 
+
   const ProfileForm({
     super.key,
     required this.user,
@@ -1622,6 +1683,7 @@ class ProfileForm extends StatefulWidget {
 }
 
 class _ProfileFormState extends State<ProfileForm> {
+  bool _showProfilePicHint = true;
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _benutzernameController = TextEditingController();
   final TextEditingController _vornameController = TextEditingController();
@@ -1816,276 +1878,322 @@ class _ProfileFormState extends State<ProfileForm> {
     return null;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    
-    // KORREKTUR: Erzeuge eine lesbare Liste der fehlenden Felder für die UI.
-    final missingFieldDisplayNames = widget.missingFields
-        .map((field) => _fieldDisplayNames[field] ?? field)
-        .join(', ');
+@override
+Widget build(BuildContext context) {
+  final screenHeight = MediaQuery.of(context).size.height;
+  
+  // KORREKTUR: Erzeuge eine lesbare Liste der fehlenden Felder für die UI.
+  final missingFieldDisplayNames = widget.missingFields
+      .map((field) => _fieldDisplayNames[field] ?? field)
+      .join(', ');
 
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(height: screenHeight * 0.05), // Abstand von oben
+  return SingleChildScrollView(
+    child: Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: screenHeight * 0.05),
 
-              Center(
-                child: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundColor: Colors.white10,
-                      backgroundImage: _profileImageUrl != null
-                          ? NetworkImage(_profileImageUrl!)
-                          : null,
-                      child: _profileImageUrl == null
-                          ? Icon(
-                              Icons.person,
-                              size: 60,
-                              color: Colors.white70,
-                            )
-                          : null,
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: IconButton(
-                        icon: const Icon(Icons.camera_alt, color: Colors.orange, size: 30),
-                        onPressed: _pickImage,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Profil vervollständigen',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              if (widget.missingFields.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16.0),
-                  child: Text(
-                    // KORREKTUR: Verwende die lesbare Liste.
-                    'Bitte fülle die folgenden fehlenden Felder aus: $missingFieldDisplayNames',
-                    style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
+            Center(
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 60,
+                    backgroundColor: Colors.white10,
+                    backgroundImage: _profileImageUrl != null
+                        ? NetworkImage(_profileImageUrl!)
+                        : null,
+                    child: _profileImageUrl == null
+                        ? Icon(
+                            Icons.person,
+                            size: 60,
+                            color: Colors.white70,
+                          )
+                        : null,
                   ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.camera_alt, color: Colors.orange, size: 30),
+                          onPressed: () {
+                            _pickImage();
+                            setState(() {
+                              _showProfilePicHint = false; // Overlay ausblenden
+                            });
+                          },
+                        ),
+                        if (_showProfilePicHint)
+                          Positioned(
+                            top: -65,
+                            right: 0,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: Column(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 8, horizontal: 14),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.shade700,
+                                      borderRadius: BorderRadius.circular(16),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black26,
+                                          blurRadius: 4,
+                                          offset: Offset(2, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Text(
+                                      "Hier Profilbild hochladen!",
+                                      style: TextStyle(
+                                          color: Colors.white, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  CustomPaint(
+                                    size: const Size(20, 10),
+                                    painter: _TrianglePainter(),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Profil vervollständigen',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            if (widget.missingFields.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Text(
+                  // KORREKTUR: Verwende die lesbare Liste.
+                  'Bitte fülle die folgenden fehlenden Felder aus: $missingFieldDisplayNames',
+                  style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
                 ),
-              TextFormField(
-                controller: _benutzernameController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(labelText: 'Benutzername'),
-                validator: (value) => _validateRequired(value, 'benutzername'),
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _vornameController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(labelText: 'Vorname'),
-                validator: (value) => _validateRequired(value, 'vorname'),
+            TextFormField(
+              controller: _benutzernameController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'Benutzername'),
+              validator: (value) => _validateRequired(value, 'benutzername'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _vornameController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'Vorname'),
+              validator: (value) => _validateRequired(value, 'vorname'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _nachnameController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'Nachname'),
+              validator: (value) => _validateRequired(value, 'nachname'),
+            ),
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => _selectDate(context),
+              child: AbsorbPointer(
+                child: TextFormField(
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: _geburtsdatum == null
+                        ? 'Geburtsdatum'
+                        : 'Geburtsdatum: ${_geburtsdatum!.toLocal().toIso8601String().split('T')[0]}',
+                    suffixIcon: const Icon(Icons.calendar_today, color: Colors.white70),
+                  ),
+                  validator: (value) => _validateRequiredDate(_geburtsdatum, 'geburtsdatum'),
+                ),
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _nachnameController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(labelText: 'Nachname'),
-                validator: (value) => _validateRequired(value, 'nachname'),
-              ),
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: () => _selectDate(context),
-                child: AbsorbPointer(
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _selectedGender,
+              dropdownColor: const Color(0xFF1C1C1C),
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'Geschlecht'),
+              items: ['Männlich', 'Weiblich', 'Divers', 'Möchte ich nicht angeben']
+                  .map((String gender) {
+                return DropdownMenuItem<String>(
+                  value: gender,
+                  child: Text(gender),
+                );
+              }).toList(),
+              onChanged: (String? newValue) {
+                setState(() {
+                  _selectedGender = newValue;
+                });
+              },
+              validator: (value) => _validateRequired(value, 'gender'),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
                   child: TextFormField(
+                    controller: _plzController,
                     style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: _geburtsdatum == null
-                          ? 'Geburtsdatum'
-                          : 'Geburtsdatum: ${_geburtsdatum!.toLocal().toIso8601String().split('T')[0]}',
-                      suffixIcon: const Icon(Icons.calendar_today, color: Colors.white70),
-                    ),
-                    validator: (value) => _validateRequiredDate(_geburtsdatum, 'geburtsdatum'),
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Postleitzahl'),
                   ),
                 ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: _cityController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'Stadt'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            // NEU: Lieblingsfarbe Dropdown
+            DropdownButtonFormField<String>(
+              value: _selectedFavoriteColor,
+              dropdownColor: const Color(0xFF1C1C1C),
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Lieblingsfarbe (Optional)',
+                hintText: 'Wähle deine Lieblingsfarbe',
               ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _selectedGender,
-                dropdownColor: const Color(0xFF1C1C1C),
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(labelText: 'Geschlecht'),
-                items: ['Männlich', 'Weiblich', 'Divers', 'Möchte ich nicht angeben']
-                    .map((String gender) {
+              items: [
+                const DropdownMenuItem<String>(
+                  value: null,
+                  child: Text('Keine Auswahl', style: TextStyle(color: Colors.white70)),
+                ),
+                ...widget.colorOptions.keys.map((String colorName) {
                   return DropdownMenuItem<String>(
-                    value: gender,
-                    child: Text(gender),
+                    value: colorName,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 20,
+                          height: 20,
+                          color: widget.colorOptions[colorName],
+                        ),
+                        const SizedBox(width: 10),
+                        Text(colorName),
+                      ],
+                    ),
                   );
                 }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    _selectedGender = newValue;
-                  });
-                },
-                
-                validator: (value) => _validateRequired(value, 'gender'),
+              ],
+              onChanged: (String? newValue) {
+                setState(() {
+                  _selectedFavoriteColor = newValue;
+                });
+              },
+            ),
+            const SizedBox(height: 20),
+            const Text('Rollen:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            CheckboxListTile(
+              title: const Text('Doggy (oder Streuner)', style: TextStyle(color: Colors.white)),
+              value: _doggyRole,
+              onChanged: (bool? value) {
+                setState(() {
+                  _doggyRole = value ?? false;
+                });
+              },
+              controlAffinity: ListTileControlAffinity.leading,
+              activeColor: Theme.of(context).colorScheme.primary,
+              checkColor: Colors.black,
+            ),
+            CheckboxListTile(
+              title: const Text('Herrchen', style: TextStyle(color: Colors.white)),
+              value: _herrchenRole,
+              onChanged: (bool? value) {
+                setState(() {
+                  _herrchenRole = value ?? false;
+                });
+              },
+              controlAffinity: ListTileControlAffinity.leading,
+              activeColor: Theme.of(context).colorScheme.primary,
+              checkColor: Colors.black,
+            ),
+            if (_validateRequiredRole() != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 16.0, top: 8.0),
+                child: Text(
+                  _validateRequiredRole()!,
+                  style: const TextStyle(color: Colors.red, fontSize: 12),
+                ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _plzController,
-                      style: const TextStyle(color: Colors.white),
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Postleitzahl'),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _cityController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(labelText: 'Stadt'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              // NEU: Lieblingsfarbe Dropdown
-              DropdownButtonFormField<String>(
-                value: _selectedFavoriteColor,
-                dropdownColor: const Color(0xFF1C1C1C),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Checkbox(
+                  value: _ageHidden,
+                  fillColor: MaterialStateProperty.all(Theme.of(context).colorScheme.secondary),
+                  checkColor: Colors.black,
+                  onChanged: (v) => setState(() => _ageHidden = v ?? false),
+                ),
+                const Text("Alter im Profil verstecken", style: TextStyle(color: Colors.white)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Checkbox(
+                  value: _diskretModus,
+                  fillColor: MaterialStateProperty.all(Theme.of(context).colorScheme.secondary),
+                  checkColor: Colors.black,
+                  onChanged: (v) => setState(() => _diskretModus = v ?? false),
+                ),
+                const Text("Diskreter Modus (App mit PIN sichern)", style: TextStyle(color: Colors.white)),
+              ],
+            ),
+            if (_diskretModus)
+              TextField(
+                controller: _pinController,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Lieblingsfarbe (Optional)',
-                  hintText: 'Wähle deine Lieblingsfarbe',
-                ),
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('Keine Auswahl', style: TextStyle(color: Colors.white70)),
-                  ),
-                  ...widget.colorOptions.keys.map((String colorName) {
-                    return DropdownMenuItem<String>(
-                      value: colorName,
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 20,
-                            height: 20,
-                            color: widget.colorOptions[colorName],
-                          ),
-                          const SizedBox(width: 10),
-                          Text(colorName),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ],
-                onChanged: (String? newValue) {
-                  setState(() {
-                    _selectedFavoriteColor = newValue;
-                  });
-                },
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: const InputDecoration(labelText: "PIN (6-stellig)"),
               ),
-              const SizedBox(height: 20),
-              const Text('Rollen:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              CheckboxListTile(
-                title: const Text('Doggy (oder Streuner)', style: TextStyle(color: Colors.white)),
-                value: _doggyRole,
-                onChanged: (bool? value) {
-                  setState(() {
-                    _doggyRole = value ?? false;
-                  });
-                },
-                controlAffinity: ListTileControlAffinity.leading,
-                activeColor: Theme.of(context).colorScheme.primary, // Dynamische Farbe
-                checkColor: Colors.black,
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _loading ? null : _saveProfile,
+                child: _loading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          color: Colors.black,
+                        ),
+                      )
+                    : const Text("Profil speichern"),
               ),
-              CheckboxListTile(
-                title: const Text('Herrchen', style: TextStyle(color: Colors.white)),
-                value: _herrchenRole,
-                onChanged: (bool? value) {
-                  setState(() {
-                    _herrchenRole = value ?? false;
-                  });
-                },
-                controlAffinity: ListTileControlAffinity.leading,
-                activeColor: Theme.of(context).colorScheme.primary, // Dynamische Farbe
-                checkColor: Colors.black,
-              ),
-              if (_validateRequiredRole() != null)
-                Padding(
-                  padding: const EdgeInsets.only(left: 16.0, top: 8.0),
-                  child: Text(
-                    _validateRequiredRole()!,
-                    style: const TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-                ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Checkbox(
-                    value: _ageHidden,
-                    fillColor: MaterialStateProperty.all(Theme.of(context).colorScheme.secondary), // Dynamische Farbe
-                    checkColor: Colors.black,
-                    onChanged: (v) => setState(() => _ageHidden = v ?? false),
-                  ),
-                  const Text("Alter im Profil verstecken", style: TextStyle(color: Colors.white)),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Checkbox(
-                    value: _diskretModus,
-                    fillColor: MaterialStateProperty.all(Theme.of(context).colorScheme.secondary), // Dynamische Farbe
-                    checkColor: Colors.black,
-                    onChanged: (v) => setState(() => _diskretModus = v ?? false),
-                  ),
-                  const Text("Diskreter Modus (App mit PIN sichern)", style: TextStyle(color: Colors.white)),
-                ],
-              ),
-              if (_diskretModus)
-                TextField(
-                  controller: _pinController,
-                  style: const TextStyle(color: Colors.white),
-                  obscureText: true,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  decoration: const InputDecoration(labelText: "PIN (6-stellig)"),
-                ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _loading ? null : _saveProfile,
-                  child: _loading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 3,
-                            color: Colors.black,
-                          ),
-                        )
-                      : const Text("Profil speichern"),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
+
 
   @override
   void dispose() {
@@ -2098,3 +2206,19 @@ class _ProfileFormState extends State<ProfileForm> {
     super.dispose();
   }
 }
+
+class _TrianglePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.orange.shade700;
+    final path = Path();
+    path.moveTo(0, 0);
+    path.lineTo(size.width / 2, size.height);
+    path.lineTo(size.width, 0);
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
+}
+
