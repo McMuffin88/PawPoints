@@ -9,6 +9,7 @@ import 'herrchen_drawer.dart';
 import '../main.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+import '../Start/bottom_navigator.dart';
 
 InputDecoration customFieldDecoration(
     String label,
@@ -447,14 +448,23 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
     }
 
     @override
-    Widget build(BuildContext context) {
-        return Scaffold(
-            key: _scaffoldKey,
-            appBar: AppBar(
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                iconTheme: const IconThemeData(color: Colors.white),
-            ),
+Widget build(BuildContext context) {
+  return Scaffold(
+    key: _scaffoldKey,
+    appBar: AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      iconTheme: const IconThemeData(color: Colors.white),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () {
+  Navigator.pushReplacement(
+  context, 
+  MaterialPageRoute(builder: (_) => BottomNavigator(role: "herrchen"))
+          );
+        },
+      ),
+    ),
             drawer: buildHerrchenDrawer(context, () {}, []),
             body: _isLoading && !_isEditing
                 ? const Center(child: CircularProgressIndicator())

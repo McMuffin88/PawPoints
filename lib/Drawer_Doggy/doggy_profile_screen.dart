@@ -9,6 +9,8 @@ import 'doggy_drawer.dart';
 import '../main.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+import '../Start/bottom_navigator.dart';
+
 
 InputDecoration customFieldDecoration(
   String label,
@@ -542,10 +544,19 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
+  backgroundColor: Colors.transparent,
+  elevation: 0,
+  iconTheme: const IconThemeData(color: Colors.white),
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back),
+    onPressed: () {
+  Navigator.pushReplacement(
+  context, 
+  MaterialPageRoute(builder: (_) => BottomNavigator(role: "doggy"))
+      );
+    },
+  ),
+),
       drawer: buildDoggyDrawer(context),
       body: _isLoading && !_isEditing
           ? const Center(child: CircularProgressIndicator())

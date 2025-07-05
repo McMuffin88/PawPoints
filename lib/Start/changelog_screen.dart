@@ -54,6 +54,16 @@ class ChangelogScreen extends StatelessWidget {
           "Anpassung der Abstände in der Aufgabenerstellung des Herrchens",
           "Anpassung: Zentrierung der Doggys in der Shop-Anzeige",
           "#2 Bug behoben: Endzeit wird nun live bei Änderung angezeigt"
+         ]
+      },
+      {
+        "version": "0.0.388",
+        "changes": [
+          "Umbau der Berechtigungen: Berechtigungen jetzt mit Funktion (aber im Doggy Screen noch nicht implementiert)",
+          "Premiumfeatures eingebaut für Berechtigungen",
+          "Premiumseite neu erstellt – Premium jetzt buchbar (ohne Google Play Store, vorübergehend)",
+          "Bug behoben: Profilscreen – Burgermenü durch Zurückbutton ersetzt",
+          "Neu: Adminpanel hinzugefügt – nur für Admins sichtbar"
         ]
       }
     ];

@@ -617,10 +617,236 @@ exports.getOwnPendingRequest = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError(e.code || 'internal', e.message || e.toString());
   }
 });
+// -----------------------------------------
+// 12. Doggy Berechtigungen aktualisieren
+// -----------------------------------------
+exports.updateDoggyPermissions = functions.https.onCall(async (data, context) => {
+  const herrchenId = context.auth?.uid;
+  const doggyId = data.doggyId;
+  const permissions = data.permissions;
+
+  if (!herrchenId) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
+  if (!doggyId) throw new functions.https.HttpsError('invalid-argument', 'Kein Doggy angegeben.');
+  if (!permissions || typeof permissions !== 'object') throw new functions.https.HttpsError('invalid-argument', 'Keine Berechtigungen angegeben.');
+
+  const doggyPermRef = admin.firestore()
+    .collection('users')
+    .doc(herrchenId)
+    .collection('doggys')
+    .doc(doggyId);
+
+  try {
+    await doggyPermRef.set(permissions, { merge: true });
+    return { success: true };
+  } catch (error) {
+    console.error('[updateDoggyPermissions] Fehler:', error);
+    throw new functions.https.HttpsError('internal', 'Fehler beim Aktualisieren der Berechtigungen.');
+  }
+});
+
+// -----------------------------------------
+// 13. Herrchen Premium-Status prüfen
+// -----------------------------------------
+exports.checkHerrchenPremiumStatus = functions.https.onCall(async (data, context) => {
+  const herrchenId = context.auth?.uid;
+  if (!herrchenId) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
+
+  try {
+    const userDoc = await admin.firestore().collection('users').doc(herrchenId).get();
+    const isPremium = !!(userDoc.data()?.premium?.herrchen);
+    return { isPremium };
+  } catch (error) {
+    console.error('[checkHerrchenPremiumStatus] Fehler:', error);
+    throw new functions.https.HttpsError('internal', 'Fehler beim Prüfen des Premium-Status.');
+  }
+});
+
+// -----------------------------------------
+// 14. Doggy Rechte lesen
+// -----------------------------------------
+exports.getAllHerrchenPermissions = functions.https.onCall(async (data, context) => {
+  const herrchenId = context.auth?.uid;
+  const doggyIds = data.doggyIds;
+
+  if (!herrchenId) {
+    throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
+  }
+
+  if (!Array.isArray(doggyIds) || doggyIds.length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'Liste der Doggy-IDs fehlt oder ist leer.');
+  }
+
+  try {
+    const db = admin.firestore();
+    const results = {};
+
+    const herrchenSnap = await db.collection('users').doc(herrchenId).get();
+    const herrchenPremium = !!(herrchenSnap.data()?.premium?.herrchen);
+
+    const refs = doggyIds.map(id =>
+      db.collection('users').doc(herrchenId).collection('doggys').doc(id)
+    );
+    const snapshots = await db.getAll(...refs);
+
+    snapshots.forEach((snap, i) => {
+      const doggyId = doggyIds[i];
+      const data = snap.exists ? snap.data() : {};
+      // Wenn nicht Premium, setze canReactToPunishment auf false (nur zur Anzeige)
+      if (!herrchenPremium && data?.canReactToPunishment !== undefined) {
+        data._canReactToPunishmentDisabled = true;
+      }
+      results[doggyId] = data;
+    });
+
+    return { permissions: results };
+  } catch (error) {
+    console.error('[getAllHerrchenPermissions] Fehler:', error);
+    throw new functions.https.HttpsError('internal', 'Fehler beim Laden der Berechtigungen.');
+  }
+});
 
 
 
+// -----------------------------------------
+// 15. Prüdung Gratis Zeitraum (dummy)
+// -----------------------------------------
 
+
+exports.requestPremium = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt');
+
+  const plan = data.plan;
+  const role = data.role;
+  const days = data.days;
+
+  // --- Parameter prüfen ---
+  if (!plan || !role || !days) {
+    throw new functions.https.HttpsError('invalid-argument', 'Fehlende Angaben: plan, role oder days');
+  }
+
+  const userRef = admin.firestore().collection('users').doc(uid);
+  const userDoc = await userRef.get();
+  const userData = userDoc.data() || {};
+
+  // Bereits aktiviert?
+  if (userData.pawpassActivatedOnce) {
+    throw new functions.https.HttpsError('failed-precondition', 'Du hast den Gratiszeitraum bereits genutzt.');
+  }
+
+  // Hole bisherige Anfragen für den User
+  const reqSnap = await admin.firestore()
+    .collection('pawpassRequests')
+    .where('userId', '==', uid)
+    .orderBy('number', 'desc')
+    .limit(1)
+    .get();
+
+  let nextNumber = 1;
+  if (!reqSnap.empty) {
+    const maxNum = reqSnap.docs[0].data().number || 0;
+    nextNumber = maxNum + 1;
+  }
+
+  // Anfrage speichern
+  await admin.firestore().collection('pawpassRequests').add({
+    userId: uid,
+    userName: userData.benutzername || 'Unbekannt',
+    plan,
+    role,
+    days,
+    requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+    status: 'pending',
+    number: nextNumber
+  });
+
+  return { success: true, number: nextNumber };
+});
+
+
+// -----------------------------------------
+// 15. Nur einmal Gratis 4 Wochen setzen dummy
+// -----------------------------------------
+
+exports.respondToPawPassRequest = functions.https.onCall(async (data, context) => {
+  const adminUid = context.auth?.uid;
+  if (!adminUid) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt');
+  if (adminUid !== '6IsGCiHacsSyeP6N27xDv6U6sLC2') {
+    throw new functions.https.HttpsError('permission-denied', 'Nur Admin darf dies tun');
+  }
+
+  const requestId = data.requestId;
+  const accept = !!data.accept;
+
+  if (!requestId) throw new functions.https.HttpsError('invalid-argument', 'Keine Anfrage-ID angegeben');
+
+  const db = admin.firestore();
+  const reqRef = db.collection('pawpassRequests').doc(requestId);
+  const reqSnap = await reqRef.get();
+  if (!reqSnap.exists) throw new functions.https.HttpsError('not-found', 'Anfrage nicht gefunden');
+
+  const req = reqSnap.data();
+
+  if (accept) {
+    // days holen (wird als int erwartet!)
+    const days = Number(req.days || req.durationDays || 0); // Fallback, aber meistens nur req.days nötig
+    if (!days || isNaN(days) || days < 1) {
+      throw new functions.https.HttpsError('invalid-argument', 'Ungültige Anzahl an Tagen für PawPass!');
+    }
+    const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + days * 24 * 60 * 60 * 1000));
+    await db.collection('users').doc(req.userId).set({
+      premium: {
+        [req.role]: true,
+        since: admin.firestore.Timestamp.now(),
+        expiresAt: expiresAt,
+      },
+      pawpassActivatedOnce: true,
+    }, { merge: true });
+
+    await reqRef.update({
+      status: 'accepted',
+      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return { success: true, message: 'PawPass freigeschaltet' };
+  } else {
+    await reqRef.update({
+      status: 'rejected',
+      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { success: true, message: 'PawPass-Anfrage abgelehnt' };
+  }
+});
+
+
+// -----------------------------------------
+// 16. Alle offenen PawPass-Anfragen für Admin-Panel
+// -----------------------------------------
+exports.getAllOpenPawPassRequests = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError('unauthenticated', 'Nicht eingeloggt.');
+
+  // OPTIONAL: Admin-Rolle prüfen!
+  const userDoc = await admin.firestore().collection('users').doc(uid).get();
+  const roles = userDoc.data()?.roles || [];
+  if (!roles.includes('admin')) {
+    throw new functions.https.HttpsError('permission-denied', 'Keine Adminrechte.');
+  }
+
+  const snap = await admin.firestore()
+    .collection('pawpassRequests')
+    .where('status', '==', 'pending')
+    .orderBy('requestedAt', 'desc')
+    .limit(50)
+    .get();
+
+  return {
+    requests: snap.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }))
+  };
+});
 
 
 
