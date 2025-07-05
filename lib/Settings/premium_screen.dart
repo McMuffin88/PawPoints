@@ -155,91 +155,91 @@ class _PremiumScreenState extends State<PremiumScreen> with SingleTickerProvider
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(  // <---- NEU!
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.verified, color: _favoriteColor, size: 32),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Werde Teil des PawPass-Programms',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: _favoriteColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Exklusive Inhalte für dich & deinen Doggy. Getrennt für Herrchen und Doggys sichtbar.',
-                    style: TextStyle(color: Colors.white70),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  _buildPromoBox(),
-                  const SizedBox(height: 24),
+                  Icon(Icons.verified, color: _favoriteColor, size: 32),
+                  const SizedBox(width: 10),
                   Expanded(
-                    child: FadeTransition(
-                      opacity: _fadeInAnimation,
-                      child: _buildFeatureSection(),
+                    child: Text(
+                      'Werde Teil des PawPass-Programms',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: _favoriteColor,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  _buildSharedFeatures(),
-                  const SizedBox(height: 20),
-                  if (!_pawPassAlreadyActivated)
-                    OutlinedButton(
-                      onPressed: _showPlanDialog,
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: _favoriteColor, width: 2),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
-                        backgroundColor: Colors.transparent,
-                      ),
-                      child: Text(
-                        'PawPass jetzt aktivieren',
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Exklusive Inhalte für dich & deinen Doggy. Getrennt für Herrchen und Doggys sichtbar.',
+                style: TextStyle(color: Colors.white70),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              _buildPromoBox(),
+              const SizedBox(height: 24),
+              _buildFeatureSection(),     // <-- Kein Expanded mehr!
+              const SizedBox(height: 16),
+              _buildSharedFeatures(),
+              const SizedBox(height: 20),
+              if (!_pawPassAlreadyActivated)
+                OutlinedButton(
+                  onPressed: _showPlanDialog,
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: _favoriteColor, width: 2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+                    backgroundColor: Colors.transparent,
+                  ),
+                  child: Text(
+                    'PawPass jetzt aktivieren',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: _favoriteColor,
+                    ),
+                  ),
+                ),
+              if (_pawPassAlreadyActivated)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: _favoriteColor, width: 2),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.lock, color: _favoriteColor),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Du hast den Gratiszeitraum bereits genutzt.',
                         style: TextStyle(
-                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: _favoriteColor,
                         ),
                       ),
-                    ),
-                  if (_pawPassAlreadyActivated)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[900],
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: _favoriteColor, width: 2),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.lock, color: _favoriteColor),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Du hast den Gratiszeitraum bereits genutzt.',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: _favoriteColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
+
+
 
   Widget _buildPromoBox() {
     final glow = 0.5 + 0.5 * _controller.value;
