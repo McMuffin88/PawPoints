@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '/doggyaufgabenform.dart';
+import 'package:provider/provider.dart'; // Import für Provider
+import '/Drawer_herrchen/doggyaufgabenform.dart';
+import '/Settings/schriftgroesse_provider.dart'; // Importiere deinen SchriftgroesseProvider
 
 // ICON-MAP OBEN EINMALIG DEFINIEREN
 final Map<String, IconData> iconMap = {
@@ -71,6 +73,35 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
     });
   }
 
+  // NEUE METHODE ZUM ANZEIGEN DES AUFGABEN-ERSTELLUNGS-DIALOGS
+  void _showTaskCreationDialog() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bitte melden Sie sich an, um eine Aufgabe zu erstellen.')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        // Zugriff auf den SchriftgroesseProvider, um die Lieblingsfarbe zu erhalten
+
+        return DoggyTaskCreationDialog(
+
+          herrchenId: user.uid, // Die aktuelle User-ID (Herrchen-ID)
+          onTaskAdded: () {
+            // Optional: Aktionen nach dem Hinzufügen der Aufgabe, z.B. Newsfeed aktualisieren
+            // Navigator.of(context).pop(); // Falls der Dialog nicht automatisch schließt
+            _loadDoggys(); // Lädt die Doggys neu, um ggf. aktualisierte Daten zu reflektieren
+          },
+        );
+      },
+    );
+  }
+
+
   Widget _buildTaskList(String category) {
     if (_selectedDoggy == null) {
       return const Center(child: Text('Kein Doggy ausgewählt.'));
@@ -137,8 +168,8 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
                             text: category == 'Belohnung'
                                 ? 'Beschreibung: '
                                 : category == 'Bestrafung'
-                                    ? 'Grund: '
-                                    : 'Aufgabe: ',
+                                ? 'Grund: '
+                                : 'Aufgabe: ',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                             children: [
                               TextSpan(
@@ -208,26 +239,12 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
                           .collection(collectionPath)
                           .doc(doc.id)
                           .delete();
-                    } else if (value == 'edit') {
-                      showDialog(
-                        context: context,
-                        builder: (_) => DoggyTaskShopAddButton(
-                          doggys: _doggys,
-                          onTaskAdded: _loadDoggys,
-                          activeTab: category,
-                        ).buildEditDialog(
-                          context,
-                          {
-                            ...task,
-                            'doggyId': _selectedDoggy,
-                          },
-                          doc.id,
-                        ),
-                      );
                     }
+                    // Die Bearbeitungsfunktion wurde entfernt, da DoggyTaskShopAddButton.buildEditDialog nicht mehr existiert.
+                    // Bei Bedarf müsste hier eine neue Implementierung für die Bearbeitung erfolgen.
                   },
                   itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
+                    // PopupMenuItem(value: 'edit', child: Text('Bearbeiten')), // Bearbeitungsoption entfernt
                     PopupMenuItem(value: 'delete', child: Text('Löschen')),
                   ],
                 ),
@@ -239,52 +256,52 @@ class _HerrchenShopScreenState extends State<HerrchenShopScreen>
     );
   }
 
-Widget _buildDoggySelector() {
-  return SizedBox(
-    height: 130,
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: _doggys.map((doggy) {
-          final selected = doggy['id'] == _selectedDoggy;
+  Widget _buildDoggySelector() {
+    return SizedBox(
+      height: 130,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: _doggys.map((doggy) {
+            final selected = doggy['id'] == _selectedDoggy;
 
-          return GestureDetector(
-            onTap: () => setState(() => _selectedDoggy = doggy['id']),
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.transparent),
-                borderRadius: BorderRadius.circular(12),
+            return GestureDetector(
+              onTap: () => setState(() => _selectedDoggy = doggy['id']),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.transparent),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                width: 120,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      backgroundImage: doggy['profileImageUrl'] != null
+                          ? NetworkImage(doggy['profileImageUrl'])
+                          : null,
+                      radius: 25,
+                      child: doggy['profileImageUrl'] == null
+                          ? const Icon(Icons.pets)
+                          : null,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(doggy['benutzername'] ?? 'Unbenannt', textAlign: TextAlign.center),
+                    if (doggy['age'] != null) Text('Alter: ${doggy['age']}'),
+                    if (doggy['level'] != null) Text('Level: ${doggy['level']}'),
+                  ],
+                ),
               ),
-              width: 120,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    backgroundImage: doggy['profileImageUrl'] != null
-                        ? NetworkImage(doggy['profileImageUrl'])
-                        : null,
-                    radius: 25,
-                    child: doggy['profileImageUrl'] == null
-                        ? const Icon(Icons.pets)
-                        : null,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(doggy['benutzername'] ?? 'Unbenannt', textAlign: TextAlign.center),
-                  if (doggy['age'] != null) Text('Alter: ${doggy['age']}'),
-                  if (doggy['level'] != null) Text('Level: ${doggy['level']}'),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
 
   @override
@@ -296,32 +313,34 @@ Widget _buildDoggySelector() {
       body: _doggys.isEmpty
           ? const Center(child: Text('Keine verbundenen Doggys gefunden.'))
           : Column(
-              children: [
-                const SizedBox(height: 8),
-                _buildDoggySelector(),
-                const SizedBox(height: 12),
-                TabBar(
-                  controller: _tabController,
-                  labelColor: Colors.white,
-                  onTap: (index) => setState(() => _selectedTabIndex = index),
-                  tabs: const [
-                    Tab(text: 'Aufgaben'),
-                    Tab(text: 'Belohnungen'),
-                    Tab(text: 'Bestrafungen'),
-                  ],
-                ),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: tabs.map((tab) => _buildTaskList(tab)).toList(),
-                  ),
-                ),
-              ],
+        children: [
+          const SizedBox(height: 8),
+          _buildDoggySelector(),
+          const SizedBox(height: 12),
+          TabBar(
+            controller: _tabController,
+            labelColor: Colors.white,
+            onTap: (index) => setState(() => _selectedTabIndex = index),
+            tabs: const [
+              Tab(text: 'Aufgaben'),
+              Tab(text: 'Belohnungen'),
+              Tab(text: 'Bestrafungen'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: tabs.map((tab) => _buildTaskList(tab)).toList(),
             ),
-      floatingActionButton: DoggyTaskShopAddButton(
-        doggys: _doggys,
-        onTaskAdded: _loadDoggys,
-        activeTab: tabs[_selectedTabIndex],
+          ),
+        ],
+      ),
+      // ERSETZTER FLOATING ACTION BUTTON
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: Colors.brown.shade300, // Oder deine Akzentfarbe
+        icon: const Icon(Icons.add_task_rounded),
+        label: const Text('Neue Aufgabe erstellen'),
+        onPressed: _showTaskCreationDialog, // Ruft die neue Methode auf
       ),
     );
   }

@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:provider/provider.dart';
 import '/Drawer_herrchen/Herrchen_drawer.dart';
 import '/Start/update.dart';
 import '/Drawer_Doggy/find_herrchen_screen.dart';
+import '/Settings/schriftgroesse_provider.dart';
+import '/Settings/schriftgroesse_screen.dart';
+import 'Drawer_herrchen/doggyaufgabenform.dart';
+
 
 // ----------- Farb-Mapping wie in "Meine Doggys" ------------
 final Map<String, Color> colorMap = {
@@ -21,7 +26,7 @@ final Map<String, Color> colorMap = {
   'Braun': Colors.brown,
 };
 
-// ----------- DoggyAvatar Widget ------------
+// ----------- DoggyAvatar Widget (unverändert) ------------
 class DoggyAvatar extends StatelessWidget {
   final String name;
   final String? imageUrl;
@@ -123,7 +128,7 @@ class DoggyAvatar extends StatelessWidget {
   }
 }
 
-// ----------- Platzhalter für den NewsFeed ------------
+// ----------- Platzhalter für den NewsFeed (unverändert) ------------
 class NewsFeedWidget extends StatelessWidget {
   final String doggyId;
   final String doggyName;
@@ -131,10 +136,11 @@ class NewsFeedWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final schriftProvider = Provider.of<SchriftgroesseProvider>(context);
     return Center(
       child: Text(
         'Feed für $doggyName wird hier angezeigt.',
-        style: const TextStyle(color: Colors.grey, fontSize: 16),
+        style: TextStyle(color: Colors.grey, fontSize: schriftProvider.allgemeineSchriftgroesse),
       ),
     );
   }
@@ -150,14 +156,21 @@ class HerrchenScreen extends StatefulWidget {
   State<HerrchenScreen> createState() => _HerrchenScreenState();
 }
 
-class _HerrchenScreenState extends State<HerrchenScreen> {
+class _HerrchenScreenState extends State<HerrchenScreen> with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey _fabKey = GlobalKey(); // Key für den FloatingActionButton
+  OverlayEntry? _overlayEntry;
   String? _profileImageUrl;
   final List<Map<String, dynamic>> _doggys = [];
   String? _selectedDoggyId;
-  String? _userFavoriteColor; // Lieblingsfarbe des Users aus User-Dokument
+  String? _userFavoriteColor;
 
   late final String? herrchenUserId;
+
+  // Animation related properties
+  late AnimationController _animationController;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
@@ -167,12 +180,34 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
       InitService.runOncePerAppStart();
     });
 
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250), // Fast animation
+    );
+
+    _scaleAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutBack, // A nice bouncy effect for opening
+    );
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeIn,
+    );
+
     _loadProfileImageFromFirestore();
     _loadUserFavoriteColor();
     final user = FirebaseAuth.instance.currentUser;
     herrchenUserId = user?.uid;
 
     _loadDoggys();
+  }
+
+  @override
+  void dispose() {
+    _overlayEntry?.remove();
+    _animationController.dispose(); // Dispose the animation controller
+    super.dispose();
   }
 
   Future<void> _loadUserFavoriteColor() async {
@@ -205,7 +240,7 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
     }
   }
 
-  // DOGGYS und hasNewFeed laden
+
   Future<void> _loadDoggys() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -218,11 +253,9 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
       final doggy = doc.data();
       final doggyId = doc.id;
 
-      // Hole das letzte Login-Datum
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(doggyId).get();
       final lastLogin = userDoc.data()?['lastLogin']?.toDate();
 
-      // Jetzt performant: collectionGroup + userId
       final completionsSnap = (lastLogin == null)
           ? null
           : await FirebaseFirestore.instance
@@ -269,6 +302,7 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
 
   Widget _buildPendingRequests() {
     if (herrchenUserId == null) return const SizedBox();
+    final schriftProvider = Provider.of<SchriftgroesseProvider>(context, listen: false);
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -300,46 +334,14 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
                       backgroundImage: NetworkImage(doggyAvatar),
                     )
                   : const CircleAvatar(child: Icon(Icons.pets)),
-              title: const Text('Neue Anfrage!'),
+              title: Text('Neue Anfrage!', style: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse, fontWeight: FontWeight.bold)),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Doggy: $doggyName'),
+                  Text('Doggy: $doggyName', style: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse * 0.9)),
                   if (requestedAt != null)
-                    Text('Angefragt: ${requestedAt.toLocal()}'),
-                  const Text('Warte auf deine Entscheidung.'),
-                ],
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.check, color: Colors.green),
-                    tooltip: 'Annehmen',
-                    onPressed: () async {
-                      final callable = FirebaseFunctions.instance
-                          .httpsCallable('respondToPendingRequest');
-                      await callable
-                          .call({'doggyId': doggyId, 'accepted': true});
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Anfrage von $doggyName akzeptiert')),
-                      );
-                      _loadDoggys();
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.red),
-                    tooltip: 'Ablehnen',
-                    onPressed: () async {
-                      final callable = FirebaseFunctions.instance
-                          .httpsCallable('respondToPendingRequest');
-                      await callable
-                          .call({'doggyId': doggyId, 'accepted': false});
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Anfrage von $doggyName abgelehnt')),
-                      );
-                    },
-                  ),
+                    Text('Angefragt: ${requestedAt.toLocal()}', style: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse * 0.9)),
+                  Text('Warte auf deine Entscheidung.', style: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse * 0.9)),
                 ],
               ),
             ),
@@ -349,10 +351,10 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
     );
   }
 
-  // NEUE METHODE: Baut die Doggy-Auswahlleiste für die AppBar
+
   Widget _buildDoggySelector() {
     if (_doggys.isEmpty) {
-      return const SizedBox.shrink(); // Zeigt nichts an, wenn keine Doggys da sind
+      return const SizedBox.shrink();
     }
 
     return Center(
@@ -366,7 +368,6 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
             final doggy = _doggys[index];
             final isSelected = _selectedDoggyId == doggy['id'];
 
-            // Nutze hier die Lieblingsfarbe des Users für den Border
             final borderColor = (_userFavoriteColor != null &&
                     colorMap.containsKey(_userFavoriteColor))
                 ? colorMap[_userFavoriteColor]!
@@ -409,8 +410,150 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
     );
   }
 
+  // New custom central hub using OverlayEntry with animations
+  void _showCustomCentralHub(BuildContext context) {
+    if (_overlayEntry != null) {
+      _animationController.reverse().then((_) {
+        _overlayEntry?.remove();
+        _overlayEntry = null;
+      });
+      return;
+    }
+
+    final RenderBox fabRenderBox = _fabKey.currentContext?.findRenderObject() as RenderBox;
+    final Offset fabOffset = fabRenderBox.localToGlobal(Offset.zero);
+    final Size fabSize = fabRenderBox.size;
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          // Background to close on tap outside - now transparent
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () {
+                _animationController.reverse().then((_) {
+                  _overlayEntry?.remove();
+                  _overlayEntry = null;
+                });
+              },
+              child: Container(color: Colors.black.withOpacity(0.01)), // Very subtle overlay to catch taps
+            ),
+          ),
+          Positioned(
+            right: MediaQuery.of(context).size.width - (fabOffset.dx + fabSize.width),
+            bottom: MediaQuery.of(context).size.height - fabOffset.dy + (fabSize.height / 2),
+            child: FadeTransition( // Fade animation for the whole menu
+              opacity: _fadeAnimation,
+              child: ScaleTransition( // Scale animation for the whole menu
+                scale: _scaleAnimation,
+                alignment: Alignment.bottomRight, // Scale from the FAB's position
+                child: Material( // Important for shadows and correct rendering
+                  color: Colors.transparent, // Transparent background for the Material containing the menu
+                  elevation: 0, // No default elevation for Material, controlled by item boxShadow
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end, // Align menu items to the right
+                    children: [
+_buildMenuItem(
+  context,
+  'Neue Aufgabe erstellen',
+  Icons.assignment_turned_in,
+  Colors.blue,
+  () {
+showDialog(
+  context: context, // Wichtig: dieser Context ist der vom HerrchenScreen und liegt UNTER MultiProvider!
+  builder: (dialogContext) => DoggyTaskCreationDialog(
+    herrchenId: herrchenUserId!,
+    userFavoriteColorName: _userFavoriteColor,
+    onTaskAdded: _loadDoggys,
+  ),
+);
+
+    _animationController.reverse().then((_) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+    });
+  },
+),
+                      _buildMenuItem(context, 'Neue Belohnung definieren', Icons.card_giftcard, Colors.green, () {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Platzhalter: Belohnung definieren')));
+                        _animationController.reverse().then((_) { _overlayEntry?.remove(); _overlayEntry = null; });
+                      }),
+                      _buildMenuItem(context, 'Neue Bestrafung festlegen', Icons.warning_amber, Colors.red, () {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Platzhalter: Bestrafung festlegen')));
+                        _animationController.reverse().then((_) { _overlayEntry?.remove(); _overlayEntry = null; });
+                      }),
+                      // Divider, if desired (now more subtle)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                        child: Container(height: 1, width: 150, color: Colors.white24), // More subtle divider
+                      ),
+                      _buildMenuItem(context, 'Schriftgröße anpassen', Icons.format_size, null, () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => SchriftgroesseScreen()));
+                        _animationController.reverse().then((_) { _overlayEntry?.remove(); _overlayEntry = null; });
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    Overlay.of(context).insert(_overlayEntry!);
+    _animationController.forward(); // Start animation when opening
+  }
+
+  // Helper method to build individual menu items - now with refined modern style
+  Widget _buildMenuItem(BuildContext context, String text, IconData icon, Color? iconColor, VoidCallback onTap) {
+    final schriftProvider = Provider.of<SchriftgroesseProvider>(context, listen: false);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 10.0), // Slightly more padding
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade900.withOpacity(0.7), // A darker, semi-transparent background
+            borderRadius: BorderRadius.circular(12.0), // More rounded corners
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 8, // More prominent but soft shadow
+                spreadRadius: 1,
+                offset: Offset(0, 4), // Lifted slightly
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20), // Increased padding
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                text,
+                style: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse, color: Colors.white70), // Slightly muted white text
+              ),
+              const SizedBox(width: 12), // Increased spacing
+              Icon(icon, color: iconColor ?? Colors.white70, size: 24), // Icon color either specific or muted white, slightly larger
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
+    
+    final schriftProvider = Provider.of<SchriftgroesseProvider>(context);
+
+    // Bestimme die Farbe für den FAB basierend auf der Lieblingsfarbe des Users
+    final fabColor = (_userFavoriteColor != null && colorMap.containsKey(_userFavoriteColor))
+        ? colorMap[_userFavoriteColor]!
+        : Colors.orange; // Fallback-Farbe
+
     return Scaffold(
       key: _scaffoldKey,
       drawer: buildHerrchenDrawer(context, _loadProfileImageFromFirestore, _doggys),
@@ -429,6 +572,13 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
             ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        key: _fabKey, // Den Key hier zuweisen
+        onPressed: () => _showCustomCentralHub(context), // Changed to new custom hub function
+        child: const Icon(Icons.add),
+        tooltip: 'Aufgabe, Belohnung oder Bestrafung erstellen',
+        backgroundColor: fabColor,
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -450,16 +600,16 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
                                 const Icon(Icons.pets,
                                     size: 54, color: Colors.orangeAccent),
                                 const SizedBox(height: 16),
-                                const Text(
+                                Text(
                                   'Du hast noch keine Doggys.',
                                   style: TextStyle(
-                                      fontSize: 18, color: Colors.grey),
+                                      fontSize: schriftProvider.allgemeineSchriftgroesse, color: Colors.grey),
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 16),
                                 ElevatedButton.icon(
                                   icon: const Icon(Icons.search),
-                                  label: const Text('Doggy finden'),
+                                  label: Text('Doggy finden', style: TextStyle(fontSize: schriftProvider.buttonSchriftgroesse)),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.orange,
                                     foregroundColor: Colors.white,
@@ -478,21 +628,21 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
                                   },
                                 ),
                                 const SizedBox(height: 10),
-                                const Text(
+                                Text(
                                   'Tippe auf „Doggy finden“, um deinen ersten Doggy zu suchen!',
                                   style: TextStyle(
-                                      fontSize: 14, color: Colors.grey),
+                                      fontSize: schriftProvider.allgemeineSchriftgroesse * 0.9, color: Colors.grey),
                                   textAlign: TextAlign.center,
                                 ),
                               ],
                             ),
                           )
                         : (_selectedDoggyId == null
-                            ? const Center(
+                            ? Center(
                                 child: Text(
                                   'Wähle einen Doggy aus, um deinen individuellen Feed zu sehen.',
                                   style: TextStyle(
-                                      fontSize: 16, color: Colors.grey),
+                                      fontSize: schriftProvider.allgemeineSchriftgroesse, color: Colors.grey),
                                 ),
                               )
                             : Builder(
@@ -516,4 +666,5 @@ class _HerrchenScreenState extends State<HerrchenScreen> {
       ),
     );
   }
+  
 }

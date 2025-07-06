@@ -28,6 +28,7 @@ import 'package:path_provider/path_provider.dart';
 import '../Settings/schriftgroesse_provider.dart'; // Pfad ggf. anpassen!
 import 'package:provider/provider.dart';
 import 'Settings/theme_provider.dart';
+import 'herrchen_screen.dart';
 
 // import 'package:http/http.dart' as http; // Nicht mehr benötigt, da HttpHeaders.authorizationHeader entfernt wird
 

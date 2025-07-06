@@ -387,250 +387,403 @@ Future<void> _confirmAndCompleteTask(DocumentSnapshot taskDoc, DateTime instance
     );
   }
 
-  Widget _buildTaskList(int points, bool canCompleteTasks, Color favoriteColor) {
-    final user = FirebaseAuth.instance.currentUser!;
-    final now = DateTime.now();
-    final startOfDay = DateTime(now.year, now.month, now.day);
-    final cutoffDate = startOfDay.subtract(const Duration(days: 1));
-    final endBoundary = startOfDay.add(const Duration(days: 30));
+ Widget _buildTaskList(int points, bool canCompleteTasks, Color favoriteColor) {
+  final user = FirebaseAuth.instance.currentUser!;
+  final now = DateTime.now();
+  final startOfDay = DateTime(now.year, now.month, now.day);
+  final cutoffDate = startOfDay.subtract(const Duration(days: 1));
+  final endBoundary = startOfDay.add(const Duration(days: 30));
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).collection('tasks').orderBy('createdAt', descending: true).snapshots(),
-      builder: (ctx, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (!snap.hasData || snap.data!.docs.isEmpty) {
-          return const Center(child: Text('Keine offenen Aufgaben.'));
-        }
-        final docs = snap.data!.docs;
-        final instances = <Map<String, dynamic>>[];
+  return StreamBuilder<QuerySnapshot>(
+    stream: FirebaseFirestore.instance.collection('users').doc(user.uid).collection('tasks').orderBy('createdAt', descending: true).snapshots(),
+    builder: (ctx, snap) {
+      if (snap.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (!snap.hasData || snap.data!.docs.isEmpty) {
+        return const Center(child: Text('Keine offenen Aufgaben.'));
+      }
+      final docs = snap.data!.docs;
+      final instances = <Map<String, dynamic>>[];
 
-        for (var doc in docs) {
-          final data = doc.data()! as Map<String, dynamic>;
-          final dueDate = DateTime.tryParse(data['due'] ?? '');
-          final dueTimeStr = data['dueTime'] as String?;
+      for (var doc in docs) {
+        final data = doc.data()! as Map<String, dynamic>;
+        final dueDate = DateTime.tryParse(data['due'] ?? '');
+        final dueTimeStr = data['dueTime'] as String?;
 
-          DateTime? fullDateTime;
-          if (dueDate != null) {
-            if (dueTimeStr != null) {
-              final timeParts = dueTimeStr.split(':');
-              if (timeParts.length == 2) {
-                final hour = int.tryParse(timeParts[0]) ?? 0;
-                final minute = int.tryParse(timeParts[1]) ?? 0;
-                fullDateTime = DateTime(dueDate.year, dueDate.month, dueDate.day, hour, minute);
-              } else {
-                fullDateTime = dueDate;
-              }
+        DateTime? fullDateTime;
+        if (dueDate != null) {
+          if (dueTimeStr != null) {
+            final timeParts = dueTimeStr.split(':');
+            if (timeParts.length == 2) {
+              final hour = int.tryParse(timeParts[0]) ?? 0;
+              final minute = int.tryParse(timeParts[1]) ?? 0;
+              fullDateTime = DateTime(dueDate.year, dueDate.month, dueDate.day, hour, minute);
             } else {
               fullDateTime = dueDate;
             }
-          }
-          if (fullDateTime == null) continue;
-
-          final repeat = data['repeat'];
-          if (repeat == null) {
-            if (fullDateTime.isAfter(cutoffDate)) instances.add({'doc': doc, 'date': fullDateTime});
           } else {
-            var current = fullDateTime;
-            while (current.isBefore(endBoundary)) {
-              if (current.isBefore(cutoffDate)) break;
-              if (current.isAfter(cutoffDate)) instances.add({'doc': doc, 'date': current});
-              if (repeat == 'weekly') {
-                current = current.add(const Duration(days: 7));
-              } else if (repeat == 'monthly') {
-                current = DateTime(current.year, current.month + 1, current.day);
-              } else if (repeat.startsWith('every_')) {
-                final days = int.tryParse(repeat.replaceFirst('every_', '')) ?? 1;
-                current = current.add(Duration(days: days));
-              } else {
-                break;
-              }
+            fullDateTime = dueDate;
+          }
+        }
+        if (fullDateTime == null) continue;
+
+        final repeat = data['repeat'];
+        if (repeat == null) {
+          if (fullDateTime.isAfter(cutoffDate)) instances.add({'doc': doc, 'date': fullDateTime});
+        } else {
+          var current = fullDateTime;
+          while (current.isBefore(endBoundary)) {
+            if (current.isBefore(cutoffDate)) break;
+            if (current.isAfter(cutoffDate)) instances.add({'doc': doc, 'date': current});
+            if (repeat == 'weekly') {
+              current = current.add(const Duration(days: 7));
+            } else if (repeat == 'monthly') {
+              current = DateTime(current.year, current.month + 1, current.day);
+            } else if (repeat.startsWith('every_')) {
+              final days = int.tryParse(repeat.replaceFirst('every_', '')) ?? 1;
+              current = current.add(Duration(days: days));
+            } else {
+              break;
             }
           }
         }
+      }
 
-        instances.sort((a, b) => (a['date'] as DateTime).compareTo(a['date'] as DateTime));
-        return ListView.builder(
-          itemCount: instances.length,
-          itemBuilder: (ctx, i) {
-            final doc = instances[i]['doc'] as DocumentSnapshot;
-            final date = instances[i]['date'] as DateTime;
-            final data = doc.data()! as Map<String, dynamic>;
-            final dateStr = DateFormat('dd.MM.yyyy').format(date);
-            final timeStr = DateFormat('HH:mm').format(date);
-            final repeat = data['repeat'];
-            final repeatText = repeat == null
-                ? 'einmalig'
-                : repeat == 'weekly'
-                    ? 'wöchentlich'
-                    : repeat == 'monthly'
-                        ? 'monatlich'
-                        : repeat.startsWith('every_')
-                            ? 'alle ${repeat.split('_')[1]} Tage'
-                            : 'einmalig';
-            final limit = int.tryParse(data['limitValue']?.toString() ?? '') ?? 0;
-            final type = data['frequencyLimit'];
-            final freqText = type == 'mindestens'
-                ? 'Mindestens $limit×'
-                : type == 'höchstens'
-                    ? 'Höchstens $limit×'
-                    : null;
+      instances.sort((a, b) => (a['date'] as DateTime).compareTo(b['date'] as DateTime));
+      return ListView.builder(
+        itemCount: instances.length,
+        itemBuilder: (ctx, i) {
+          final doc = instances[i]['doc'] as DocumentSnapshot;
+          final date = instances[i]['date'] as DateTime;
+          final data = doc.data()! as Map<String, dynamic>;
+          final dateStr = DateFormat('dd.MM.yyyy').format(date);
+          final timeStr = DateFormat('HH:mm').format(date);
+          final repeat = data['repeat'];
+          final repeatText = repeat == null
+              ? 'einmalig'
+              : repeat == 'weekly'
+                  ? 'wöchentlich'
+                  : repeat == 'monthly'
+                      ? 'monatlich'
+                      : repeat.startsWith('every_')
+                          ? 'alle ${repeat.split('_')[1]} Tage'
+                          : 'einmalig';
+          final limit = int.tryParse(data['limitValue']?.toString() ?? '') ?? 0;
+          final type = data['frequencyLimit'];
+          final freqText = type == 'mindestens'
+              ? 'Mindestens $limit×'
+              : type == 'höchstens'
+                  ? 'Höchstens $limit×'
+                  : null;
 
-            final String? iconKey = data['icon'];
-            final IconData icon = iconKey != null && iconMap.containsKey(iconKey) ? iconMap[iconKey]! : Icons.pets;
+          final String? iconKey = data['icon'];
+          final IconData icon = iconKey != null && iconMap.containsKey(iconKey) ? iconMap[iconKey]! : Icons.pets;
 
-            return FutureBuilder<QuerySnapshot>(
-              future: doc.reference.collection('completions').where('instanceDate', isEqualTo: date.toIso8601String()).get(),
-              builder: (ctx, s) {
-                final done = s.data?.docs.length ?? 0;
-                final expired = date.isBefore(startOfDay);
+          return FutureBuilder<QuerySnapshot>(
+            future: doc.reference.collection('completions').where('instanceDate', isEqualTo: date.toIso8601String()).get(),
+            builder: (ctx, s) {
+              final done = s.data?.docs.length ?? 0;
+              final expired = date.isBefore(startOfDay);
 
-                return Card(
-                  elevation: 6,
-                  color: Colors.grey.shade900,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        CircleAvatar(
-                          radius: 28,
-                          backgroundColor: Colors.white,
-                          child: Icon(icon, color: Colors.blue, size: 32),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(data['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: favoriteColor,
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    child: Text('zu erledigen bis: $dateStr, $timeStr',
-                                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-                                  ),
-                                  const SizedBox(width: 7),
-                                  if (repeatText.isNotEmpty)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                                      decoration: BoxDecoration(
-                                        color: favoriteColor,
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(repeatText,
-                                          style: const TextStyle(
-                                              color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-                                    ),
-                                  if (freqText != null) ...[
-                                    const SizedBox(width: 7),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                                      decoration: BoxDecoration(
-                                        color: favoriteColor,
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(freqText,
-                                          style: const TextStyle(
-                                              color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        Row(
+              return Card(
+                elevation: 6,
+                color: Colors.grey.shade900,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: Colors.white,
+                        child: Icon(icon, color: Colors.blue, size: 32),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (limit > 0 && type != 'beliebig')
-                              Row(
-                                children: List.generate(
-                                  limit,
-                                  (index) => Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                                    child: CircleAvatar(
-                                      radius: 11,
-                                      backgroundColor: index < done ? Colors.white : Colors.grey.shade300,
-                                      child: Icon(
-                                        Icons.pets,
-                                        size: 16,
-                                        color: index < done ? favoriteColor : Colors.grey.shade400,
+                            Text(data['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                            const SizedBox(height: 6),
+
+                            // ---- Responsive Bereich für Badges ----
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final isMobile = constraints.maxWidth < 420;
+                                if (isMobile) {
+                                  // Handy: alles in die zweite Zeile
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                            decoration: BoxDecoration(
+                                              color: favoriteColor,
+                                              borderRadius: BorderRadius.circular(14),
+                                            ),
+                                            child: Text(
+                                              'zu erledigen bis: $dateStr, $timeStr',
+                                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (type == 'beliebig')
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                child: CircleAvatar(
-                                  radius: 11,
-                                  backgroundColor: done > 0 ? favoriteColor : Colors.grey.shade300,
-                                  child: const Icon(
-                                    Icons.pets,
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            IconButton(
-                              icon: const Icon(Icons.check_circle_outline),
-                              color: (!canCompleteTasks || expired || (type == 'höchstens' && done >= limit))
-                                  ? Colors.grey
-                                  : done > 0
-                                      ? Colors.green
-                                      : Colors.amber,
-                              iconSize: 32,
-                              tooltip: !canCompleteTasks
-                                  ? 'Du darfst Aufgaben nicht selbst abschließen.'
-                                  : expired
-                                      ? 'Frist abgelaufen'
-                                      : (type == 'höchstens' && done >= limit)
-                                          ? 'Limit erreicht'
-                                          : 'Abschließen',
-                              onPressed: () {
-                                if (!canCompleteTasks) {
-                                  showDialog(
-                                    context: ctx,
-                                    builder: (_) => AlertDialog(
-                                      title: const Text('Nicht erlaubt'),
-                                      content: const Text('Du darfst Aufgaben nicht selbst abschließen. Dein Herrchen hat das deaktiviert.'),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(ctx),
-                                          child: const Text('OK'),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          if (repeatText.isNotEmpty)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                                              decoration: BoxDecoration(
+                                                color: favoriteColor,
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                repeatText,
+                                                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                                              ),
+                                            ),
+                                          if (freqText != null) ...[
+                                            const SizedBox(width: 7),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                                              decoration: BoxDecoration(
+                                                color: favoriteColor,
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                freqText,
+                                                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      // --- NEU: Container für die Pfoten unter dem Text ---
+                                      if (limit > 0 && type != 'beliebig' || type == 'beliebig') const SizedBox(height: 8),
+
+                                      // --- VERSCHOBEN: Logik für die Pfotenanzeige (nur hier auf Mobile) ---
+                                      if (limit > 0 && type != 'beliebig')
+                                        Row(
+                                          // GEÄNDERT: Sorgt für linksbündige Ausrichtung
+                                          mainAxisAlignment: MainAxisAlignment.start, 
+                                          children: List.generate(
+                                            limit,
+                                            (index) => Padding(
+                                              padding: const EdgeInsets.only(right: 6), // Nur rechts Abstand
+                                              child: CircleAvatar(
+                                                radius: 11,
+                                                backgroundColor: index < done ? Colors.white : Colors.grey.shade300,
+                                                child: Icon(
+                                                  Icons.pets,
+                                                  size: 16,
+                                                  color: index < done ? favoriteColor : Colors.grey.shade400,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      if (type == 'beliebig')
+                                        CircleAvatar(
+                                          radius: 11,
+                                          backgroundColor: done > 0 ? favoriteColor : Colors.grey.shade300,
+                                          child: const Icon(
+                                            Icons.pets,
+                                            size: 16,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      // --- ENDE VERSCHOBENER BEREICH ---
+                                    ],
+                                  );
+                                } else {
+                                  // Web/Desktop: alles in einer Zeile
+                                  return Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                        decoration: BoxDecoration(
+                                          color: favoriteColor,
+                                          borderRadius: BorderRadius.circular(14),
+                                        ),
+                                        child: Text(
+                                          'zu erledigen bis: $dateStr, $timeStr',
+                                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 7),
+                                      if (repeatText.isNotEmpty)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            color: favoriteColor,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            repeatText,
+                                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                                          ),
+                                        ),
+                                      if (freqText != null) ...[
+                                        const SizedBox(width: 7),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            color: favoriteColor,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            freqText,
+                                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                                          ),
                                         ),
                                       ],
-                                    ),
+                                      // --- Hinzufügen der Pfoten für Web/Desktop hier ---
+                                      if (limit > 0 && type != 'beliebig')
+                                        Row(
+                                          children: List.generate(
+                                            limit,
+                                            (index) => Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 3),
+                                              child: CircleAvatar(
+                                                radius: 11,
+                                                backgroundColor: index < done ? Colors.white : Colors.grey.shade300,
+                                                child: Icon(
+                                                  Icons.pets,
+                                                  size: 16,
+                                                  color: index < done ? favoriteColor : Colors.grey.shade400,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      if (type == 'beliebig')
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                          child: CircleAvatar(
+                                            radius: 11,
+                                            backgroundColor: done > 0 ? favoriteColor : Colors.grey.shade300,
+                                            child: const Icon(
+                                              Icons.pets,
+                                              size: 16,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   );
-                                  return;
                                 }
-                                if (expired || (type == 'höchstens' && done >= limit)) {
-                                  return;
-                                }
-                                _confirmAndCompleteTask(doc, date);
                               },
                             ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                      // ---- Responsive Bereich für Haken ----
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isMobile = constraints.maxWidth < 420;
+                          if (isMobile) {
+                            // Handy: Nur noch der Haken ist hier
+                            return Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                // --- ENTFERNT: Die Pfoten waren vorher hier ---
+                                IconButton(
+                                  icon: const Icon(Icons.check_circle_outline),
+                                  color: (!canCompleteTasks || expired || (type == 'höchstens' && done >= limit))
+                                      ? Colors.grey
+                                      : done > 0
+                                          ? Colors.green
+                                          : Colors.amber,
+                                  iconSize: 32,
+                                  tooltip: !canCompleteTasks
+                                      ? 'Du darfst Aufgaben nicht selbst abschließen.'
+                                      : expired
+                                          ? 'Frist abgelaufen'
+                                          : (type == 'höchstens' && done >= limit)
+                                              ? 'Limit erreicht'
+                                              : 'Abschließen',
+                                  onPressed: () {
+                                    if (!canCompleteTasks) {
+                                      showDialog(
+                                        context: ctx,
+                                        builder: (_) => AlertDialog(
+                                          title: const Text('Nicht erlaubt'),
+                                          content: const Text('Du darfst Aufgaben nicht selbst abschließen. Dein Herrchen hat das deaktiviert.'),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(ctx),
+                                              child: const Text('OK'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    if (expired || (type == 'höchstens' && done >= limit)) {
+                                      return;
+                                    }
+                                    _confirmAndCompleteTask(doc, date);
+                                  },
+                                ),
+                              ],
+                            );
+                          } else {
+                            // Web: Der Haken bleibt hier, Pfoten wurden in den Expanded-Bereich verschoben
+                            return IconButton(
+                                  icon: const Icon(Icons.check_circle_outline),
+                                  color: (!canCompleteTasks || expired || (type == 'höchstens' && done >= limit))
+                                      ? Colors.grey
+                                      : done > 0
+                                          ? Colors.green
+                                          : Colors.amber,
+                                  iconSize: 32,
+                                  tooltip: !canCompleteTasks
+                                      ? 'Du darfst Aufgaben nicht selbst abschließen.'
+                                      : expired
+                                          ? 'Frist abgelaufen'
+                                          : (type == 'höchstens' && done >= limit)
+                                              ? 'Limit erreicht'
+                                              : 'Abschließen',
+                                  onPressed: () {
+                                    if (!canCompleteTasks) {
+                                      showDialog(
+                                        context: ctx,
+                                        builder: (_) => AlertDialog(
+                                          title: const Text('Nicht erlaubt'),
+                                          content: const Text('Du darfst Aufgaben nicht selbst abschließen. Dein Herrchen hat das deaktiviert.'),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(ctx),
+                                              child: const Text('OK'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    if (expired || (type == 'höchstens' && done >= limit)) {
+                                      return;
+                                    }
+                                    _confirmAndCompleteTask(doc, date);
+                                  },
+                                );
+                          }
+                        },
+                      ),
+                    ],
                   ),
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
+                ),
+              );
+            },
+          );
+        },
+      );
+    },
+  );
+}
 }

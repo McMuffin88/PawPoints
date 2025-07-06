@@ -33,7 +33,7 @@ final rewardsStream = FirebaseFirestore.instance
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Doggy-Shop'),
+        title: const Text('Goodie-Zentrale'),
         actions: [
           Builder(
             builder: (ctx) => StreamBuilder<DocumentSnapshot>(

@@ -848,6 +848,170 @@ exports.getAllOpenPawPassRequests = functions.https.onCall(async (data, context)
   };
 });
 
+// -----------------------------------------
+// 17. Aufgabe erstellen (createDoggyTask)
+// -----------------------------------------
+exports.createDoggyTask = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid; // Herrchen-ID
 
+  if (!uid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Sie müssen angemeldet sein, um Aufgaben zu erstellen.');
+  }
 
+  // Werte aus data entnehmen
+  const {
+    title,
+    description,
+    points,
+    frequency,
+    dueDate,
+    dueTime,
+    repeatType,
+    repeatDays,
+    repeatStartDate,
+    frequencyLimit,
+    limitValue,
+    assignedDoggyIds,
+    icon,
+    linkedRewardId,
+    linkedPunishmentId,
+    taskSeriesId,
+    isSeriesInstance,
+    taskType,
+  } = data;
+
+  // Validierungen
+  if (!title || typeof title !== 'string' || title.trim().length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'Der Aufgabentitel ist erforderlich.');
+  }
+
+  if (typeof points !== 'number' || points <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'Punkte müssen eine positive Zahl sein.');
+  }
+
+  // Frequenz prüfen - je nach erlaubtem Wertebereich
+  const validFrequencies = ['einmalig', 'täglich', 'wöchentlich', 'monatlich', 'alle x Tage', 'daily', 'weekly', 'monthly', 'every_days'];
+  if (!frequency || !validFrequencies.includes(frequency)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Ungültige Frequenzangabe.');
+  }
+
+  if (!assignedDoggyIds || !Array.isArray(assignedDoggyIds) || assignedDoggyIds.length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'Mindestens ein Doggy muss zugewiesen werden.');
+  }
+
+  if (icon && typeof icon !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'Das Icon-Format ist ungültig.');
+  }
+
+  if (linkedRewardId && typeof linkedRewardId !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'Das Format der Belohnungs-ID ist ungültig.');
+  }
+
+  if (linkedPunishmentId && typeof linkedPunishmentId !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'Das Format der Bestrafungs-ID ist ungültig.');
+  }
+
+  // DueDate optional parsen
+  let parsedDueDate = null;
+  if (dueDate) {
+    parsedDueDate = new Date(dueDate);
+    if (isNaN(parsedDueDate.getTime())) {
+      throw new functions.https.HttpsError('invalid-argument', 'Ungültiges Fälligkeitsdatum.');
+    }
+  }
+
+  // DueTime optional parsen
+  let dueTimeObj = null;
+  if (dueTime && typeof dueTime === 'string') {
+    // erwartetes Format: "HH:mm"
+    const timeParts = dueTime.split(':');
+    if (timeParts.length !== 2) {
+      throw new functions.https.HttpsError('invalid-argument', 'Ungültiges Fälligkeitszeit-Format.');
+    }
+    const hours = parseInt(timeParts[0], 10);
+    const minutes = parseInt(timeParts[1], 10);
+    if (
+      isNaN(hours) || isNaN(minutes) ||
+      hours < 0 || hours > 23 ||
+      minutes < 0 || minutes > 59
+    ) {
+      throw new functions.https.HttpsError('invalid-argument', 'Ungültige Fälligkeitszeit.');
+    }
+    dueTimeObj = { hours, minutes };
+  }
+
+  // repeatStartDate optional parsen
+  let parsedRepeatStartDate = null;
+  if (repeatStartDate) {
+    parsedRepeatStartDate = new Date(repeatStartDate);
+    if (isNaN(parsedRepeatStartDate.getTime())) {
+      throw new functions.https.HttpsError('invalid-argument', 'Ungültiges Startdatum für Wiederholung.');
+    }
+  }
+
+  // Punkte- und andere weitere Felder prüfen (optional je nach Logik)
+  if (frequencyLimit && !['beliebig', 'mindestens', 'höchstens'].includes(frequencyLimit)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Ungültige Häufigkeitsbegrenzung.');
+  }
+  if (frequencyLimit !== 'beliebig' && (typeof limitValue !== 'number' || limitValue <= 0)) {
+    throw new functions.https.HttpsError('invalid-argument', 'LimitValue muss eine positive Zahl sein, wenn Häufigkeitsbegrenzung gesetzt ist.');
+  }
+
+  const db = admin.firestore();
+
+  // Prüfen, ob zugewiesene Doggys zum Herrchen gehören (Sicherheit)
+  for (const doggyId of assignedDoggyIds) {
+    const doggyRef = db.collection('users').doc(uid).collection('doggys').doc(doggyId);
+    const doggyDoc = await doggyRef.get();
+    if (!doggyDoc.exists) {
+      throw new functions.https.HttpsError('permission-denied', `Doggy mit ID ${doggyId} gehört nicht diesem Herrchen oder existiert nicht.`);
+    }
+  }
+
+  const batch = db.batch();
+  const taskId = db.collection('tasks').doc().id;
+
+  // Task-Daten vorbereiten (alle Felder einschließen)
+  const taskData = {
+    title: title,
+    description: description || null,
+    points: points,
+    frequency: frequency,
+    dueDate: parsedDueDate ? admin.firestore.Timestamp.fromDate(parsedDueDate) : null,
+    dueTime: dueTimeObj, // {hours, minutes} oder null
+    repeatType: repeatType || null,
+    repeatDays: repeatDays || null,
+    repeatStartDate: parsedRepeatStartDate ? admin.firestore.Timestamp.fromDate(parsedRepeatStartDate) : null,
+    frequencyLimit: frequencyLimit || 'beliebig',
+    limitValue: limitValue || null,
+    assignedDoggyIds: assignedDoggyIds,
+    icon: icon || null,
+    linkedRewardId: linkedRewardId || null,
+    linkedPunishmentId: linkedPunishmentId || null,
+    taskSeriesId: taskSeriesId || null,
+    isSeriesInstance: !!isSeriesInstance,
+    taskType: taskType || 'Aufgabe',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdByHerrchenId: uid,
+    status: 'active',
+  };
+
+  // Task zentral speichern
+  const taskRef = db.collection('tasks').doc(taskId);
+  batch.set(taskRef, taskData);
+
+  // Task jedem Doggy zuordnen
+  for (const doggyId of assignedDoggyIds) {
+    const doggyTaskRef = db.collection('users').doc(doggyId).collection('tasks').doc(taskId);
+    batch.set(doggyTaskRef, taskData);
+  }
+
+  try {
+    await batch.commit();
+    return { success: true, message: 'Aufgabe erfolgreich erstellt.' };
+  } catch (error) {
+    console.error("Fehler beim Speichern der Aufgabe:", error);
+    throw new functions.https.HttpsError('internal', 'Fehler beim Speichern der Aufgabe.', error.message);
+  }
+});
 

@@ -10,20 +10,24 @@ import '../main.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import '../Start/bottom_navigator.dart';
+import 'package:provider/provider.dart';
+import '../Settings/schriftgroesse_provider.dart';
+import '../Settings/schriftgroesse_screen.dart';
 
 InputDecoration customFieldDecoration(
     String label,
     bool isEditing, {
     String? hintText,
     Widget? suffixIcon,
+    double? fontSize,
 }) {
     final radius = BorderRadius.all(Radius.circular(isEditing ? 0 : 20));
 
     return InputDecoration(
         labelText: label,
         hintText: hintText,
-        labelStyle: const TextStyle(color: Colors.white),
-        hintStyle: const TextStyle(color: Colors.white),
+        labelStyle: TextStyle(color: Colors.white, fontSize: fontSize),
+        hintStyle: TextStyle(color: Colors.white, fontSize: fontSize),
         filled: true,
         fillColor: const Color(0xFF29272C),
         enabledBorder: OutlineInputBorder(
@@ -72,6 +76,9 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
 
     bool _isEditing = false;
     bool _isLoading = false;
+
+    // Neu: Premiumstatus
+    bool _isPremium = false;
 
     // Diskret-Modus:
     bool _diskretModus = false;
@@ -132,13 +139,22 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
                     _geburtsdatum = (data['geburtsdatum'] as Timestamp).toDate();
                 }
                 _selectedGender = data['gender'];
-                _selectedFavoriteColor = data['favoriteColor'];
-                _favoriteColorSaved = data['favoriteColor'];
+
+                // PREMIUM-STATUS prüfen (neu!)
+                _isPremium = data['premium'] != null && data['premium']['herrchen'] == true;
+
+                // Lieblingsfarbe:
+                if (_isPremium) {
+                    _selectedFavoriteColor = data['favoriteColor'] ?? 'Orange';
+                } else {
+                    _selectedFavoriteColor = 'Orange';
+                }
+                _favoriteColorSaved = _selectedFavoriteColor;
                 _profileImageUrl = data['profileImageUrl'];
 
                 // Diskret-Modus laden
                 _diskretModus = data['diskretModus'] ?? false;
-                _diskretPinHash = data['pinHash']; // <--- geändert
+                _diskretPinHash = data['pinHash'];
             }
         } catch (e) {
             if (context.mounted) {
@@ -212,6 +228,9 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
             return;
         }
         try {
+            // Lieblingsfarbe nur speichern, wenn Premium. Sonst immer Orange!
+            final toSaveFavoriteColor = _isPremium ? _selectedFavoriteColor : 'Orange';
+
             await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
                 'benutzername': _benutzernameController.text.trim(),
                 'vorname': _vornameController.text.trim(),
@@ -220,11 +239,11 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
                 'city': _cityController.text.trim(),
                 'geburtsdatum': _geburtsdatum != null ? Timestamp.fromDate(_geburtsdatum!) : null,
                 'gender': _selectedGender,
-                'favoriteColor': _selectedFavoriteColor,
+                'favoriteColor': toSaveFavoriteColor,
             });
             setState(() {
                 _isEditing = false;
-                _favoriteColorSaved = _selectedFavoriteColor; // <-- Buttonfarbe erst nach Speichern übernehmen!
+                _favoriteColorSaved = toSaveFavoriteColor;
             });
             if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -379,7 +398,7 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
                             final user = FirebaseAuth.instance.currentUser;
                             if (user != null) {
                                 await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-                                    'pinHash': newHash, // geändert
+                                    'pinHash': newHash,
                                     'diskretModus': true,
                                 });
                                 setState(() {
@@ -448,29 +467,44 @@ class _HerrchenProfileScreenState extends State<HerrchenProfileScreen> {
     }
 
     @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    key: _scaffoldKey,
-    appBar: AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      iconTheme: const IconThemeData(color: Colors.white),
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: () {
-  Navigator.pushReplacement(
-  context, 
-  MaterialPageRoute(builder: (_) => BottomNavigator(role: "herrchen"))
-          );
-        },
-      ),
-    ),
+    Widget build(BuildContext context) {
+        final schriftProvider = Provider.of<SchriftgroesseProvider>(context);
+
+        return Scaffold(
+            key: _scaffoldKey,
+            appBar: AppBar(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                iconTheme: const IconThemeData(color: Colors.white),
+                leading: IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () {
+                        Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (_) => BottomNavigator(role: "herrchen"))
+                        );
+                    },
+                ),
+                actions: [
+                  IconButton(
+                    tooltip: "Schriftgröße anpassen",
+                    icon: Icon(Icons.text_fields, color: Colors.white, size: schriftProvider.allgemeineSchriftgroesse + 2),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (context) => SchriftgroesseScreen())
+                      );
+                    },
+                  )
+                ],
+            ),
             drawer: buildHerrchenDrawer(context, () {}, []),
             body: _isLoading && !_isEditing
                 ? const Center(child: CircularProgressIndicator())
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(16.0),
-                    child: Column(
+                    child: DefaultTextStyle(
+                      style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                             GestureDetector(
@@ -482,11 +516,11 @@ Widget build(BuildContext context) {
                                         ? NetworkImage(_profileImageUrl!)
                                         : null,
                                     child: _profileImageUrl == null
-                                        ? const Icon(Icons.camera_alt, size: 50, color: Colors.black54)
+                                        ? Icon(Icons.camera_alt, size: 50 + schriftProvider.allgemeineSchriftgroesse/3, color: Colors.black54)
                                         : null,
                                 ),
                             ),
-                            const SizedBox(height: 24),
+                            SizedBox(height: 24),
 
                             // Benutzername
                             TextFormField(
@@ -495,11 +529,12 @@ Widget build(BuildContext context) {
                                     'Benutzername',
                                     _isEditing,
                                     hintText: 'Gib deinen gewünschten Benutzernamen ein',
+                                    fontSize: schriftProvider.allgemeineSchriftgroesse,
                                 ),
                                 enabled: _isEditing,
-                                style: const TextStyle(color: Colors.white),
+                                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12),
 
                             // Vorname
                             TextFormField(
@@ -508,11 +543,12 @@ Widget build(BuildContext context) {
                                     'Vorname',
                                     _isEditing,
                                     hintText: 'Gib deinen Vornamen ein',
+                                    fontSize: schriftProvider.allgemeineSchriftgroesse,
                                 ),
                                 enabled: _isEditing,
-                                style: const TextStyle(color: Colors.white),
+                                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12),
 
                             // Nachname
                             TextFormField(
@@ -521,11 +557,12 @@ Widget build(BuildContext context) {
                                     'Nachname',
                                     _isEditing,
                                     hintText: 'Gib deinen Nachnamen ein',
+                                    fontSize: schriftProvider.allgemeineSchriftgroesse,
                                 ),
                                 enabled: _isEditing,
-                                style: const TextStyle(color: Colors.white),
+                                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12),
 
                             // PLZ
                             TextFormField(
@@ -534,12 +571,13 @@ Widget build(BuildContext context) {
                                     'Postleitzahl',
                                     _isEditing,
                                     hintText: 'Gib deine Postleitzahl ein',
+                                    fontSize: schriftProvider.allgemeineSchriftgroesse,
                                 ),
                                 keyboardType: TextInputType.number,
                                 enabled: _isEditing,
-                                style: const TextStyle(color: Colors.white),
+                                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12),
 
                             // Stadt
                             TextFormField(
@@ -548,11 +586,12 @@ Widget build(BuildContext context) {
                                     'Stadt',
                                     _isEditing,
                                     hintText: 'In welcher Stadt wohnst du?',
+                                    fontSize: schriftProvider.allgemeineSchriftgroesse,
                                 ),
                                 enabled: _isEditing,
-                                style: const TextStyle(color: Colors.white),
+                                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12),
 
                             // Geburtsdatum
                             TextFormField(
@@ -568,13 +607,14 @@ Widget build(BuildContext context) {
                                     'Geburtsdatum',
                                     _isEditing,
                                     hintText: 'Geburtsdatum auswählen',
+                                    fontSize: schriftProvider.allgemeineSchriftgroesse,
                                     suffixIcon: _isEditing
-                                        ? const Icon(Icons.calendar_today, color: Colors.brown)
+                                        ? Icon(Icons.calendar_today, color: Colors.brown, size: schriftProvider.allgemeineSchriftgroesse + 2)
                                         : null,
                                 ),
-                                style: const TextStyle(color: Colors.white),
+                                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12),
 
                             // Geschlecht
                             DropdownButtonFormField<String>(
@@ -589,72 +629,138 @@ Widget build(BuildContext context) {
                                     'Geschlecht',
                                     _isEditing,
                                     hintText: 'Wähle dein Geschlecht',
+                                    fontSize: schriftProvider.allgemeineSchriftgroesse,
                                 ),
-                                hint: const Text('Wähle dein Geschlecht', style: TextStyle(color: Colors.white)),
-                                style: const TextStyle(color: Colors.white),
+                                hint: Text('Wähle dein Geschlecht', style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse)),
+                                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
                                 dropdownColor: Colors.black,
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12),
 
                             // Lieblingsfarbe
-                            DropdownButtonFormField<String>(
-                                value: _selectedFavoriteColor,
-                                items: _colorMap.keys.map((colorName) {
-                                    return DropdownMenuItem(
-                                        value: colorName,
-                                        child: Row(
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                IgnorePointer(
+                                  ignoring: !_isPremium || !_isEditing,
+                                  child: Opacity(
+                                    opacity: (_isPremium && _isEditing) ? 1.0 : 0.5,
+                                    child: DropdownButtonFormField<String>(
+                                      value: _selectedFavoriteColor,
+                                      items: _colorMap.keys.map((colorName) {
+                                        return DropdownMenuItem(
+                                          value: colorName,
+                                          child: Row(
                                             children: [
-                                                Container(
-                                                    width: 20,
-                                                    height: 20,
-                                                    margin: const EdgeInsets.only(right: 8),
-                                                    decoration: BoxDecoration(
-                                                        color: _colorMap[colorName] ?? Colors.transparent,
-                                                        border: Border.all(color: Colors.black),
-                                                        borderRadius: BorderRadius.circular(4),
-                                                    ),
-                                                ),
-                                                Text(colorName, style: const TextStyle(color: Colors.white)),
-                                            ],
-                                        ),
-                                    );
-                                }).toList(),
-                                onChanged: _isEditing
-                                    ? (value) => setState(() {
-                                        _selectedFavoriteColor = value;
-                                    })
-                                    : null,
-                                decoration: customFieldDecoration(
-                                    'Lieblingsfarbe',
-                                    _isEditing,
-                                    hintText: 'Wähle deine Lieblingsfarbe',
-                                    suffixIcon: _selectedFavoriteColor != null && _colorMap[_selectedFavoriteColor!] != null
-                                        ? Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                            child: Container(
-                                                width: 24,
-                                                height: 24,
+                                              Container(
+                                                width: 20,
+                                                height: 20,
+                                                margin: const EdgeInsets.only(right: 8),
                                                 decoration: BoxDecoration(
+                                                  color: _colorMap[colorName] ?? Colors.transparent,
+                                                  border: Border.all(color: Colors.black),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                              ),
+                                              Text(colorName, style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse)),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (_isPremium && _isEditing)
+                                          ? (value) => setState(() {
+                                              _selectedFavoriteColor = value;
+                                            })
+                                          : null,
+                                      decoration: customFieldDecoration(
+                                        'Lieblingsfarbe',
+                                        _isEditing,
+                                        hintText: 'Wähle deine Lieblingsfarbe',
+                                        fontSize: schriftProvider.allgemeineSchriftgroesse,
+                                        suffixIcon: _selectedFavoriteColor != null && _colorMap[_selectedFavoriteColor!] != null
+                                            ? Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                                child: Container(
+                                                  width: 24,
+                                                  height: 24,
+                                                  decoration: BoxDecoration(
                                                     color: _colorMap[_selectedFavoriteColor!],
                                                     border: Border.all(color: Colors.black),
                                                     borderRadius: BorderRadius.circular(4),
+                                                  ),
                                                 ),
-                                            ),
-                                        )
-                                        : null,
+                                              )
+                                            : null,
+                                      ),
+                                      hint: Text('Wähle deine Lieblingsfarbe', style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse)),
+                                      style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
+                                      dropdownColor: Colors.black,
+                                    ),
+                                  ),
                                 ),
-                                hint: const Text('Wähle deine Lieblingsfarbe', style: TextStyle(color: Colors.white)),
-                                style: const TextStyle(color: Colors.white),
-                                dropdownColor: Colors.black,
+                                if (!_isPremium)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.lock, color: Colors.orange, size: schriftProvider.allgemeineSchriftgroesse + 3),
+                                        const SizedBox(width: 6),
+                                        Flexible(
+                                          child: Text(
+                                            'Lieblingsfarbe ändern nur mit PawPass möglich.',
+                                            style: TextStyle(
+                                              color: Colors.orange,
+                                              fontWeight: FontWeight.w500,
+                                              fontSize: schriftProvider.allgemeineSchriftgroesse,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                if (!_isPremium)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+                                    child: ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.of(context).pushNamed('/premium');
+                                      },
+                                      icon: Icon(Icons.star, size: schriftProvider.allgemeineSchriftgroesse + 2),
+                                      label: Text('Mehr zu PawPass', style: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.orange,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
-                            const SizedBox(height: 24),
+                            SizedBox(height: 24),
+
+                            // Schriftgröße anpassen Button (auch im Profil als große Fläche)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12.0),
+                              child: ElevatedButton.icon(
+                                icon: Icon(Icons.text_fields, size: schriftProvider.allgemeineSchriftgroesse + 2),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: favoriteButtonColor,
+                                  minimumSize: Size(double.infinity, 44 + schriftProvider.allgemeineSchriftgroesse),
+                                  textStyle: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse),
+                                ),
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (context) => SchriftgroesseScreen())
+                                  );
+                                },
+                                label: Text("Schriftgröße anpassen", style: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse)),
+                              ),
+                            ),
 
                             // DISKRET-MODUS SWITCH + PIN ändern ICON
                             Row(
                                 children: [
                                     Expanded(
                                         child: SwitchListTile(
-                                            title: const Text('Diskret-Modus', style: TextStyle(color: Colors.white)),
+                                            title: Text('Diskret-Modus', style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse)),
                                             value: _diskretModus,
                                             onChanged: !_isEditing
                                                 ? null
@@ -672,7 +778,7 @@ Widget build(BuildContext context) {
                                                                 if (user != null) {
                                                                     await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
                                                                         'diskretModus': false,
-                                                                        'pinHash': null, // geändert
+                                                                        'pinHash': null,
                                                                     });
                                                                 }
                                                             }
@@ -682,7 +788,7 @@ Widget build(BuildContext context) {
                                                             if (user != null) {
                                                                 await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
                                                                     'diskretModus': false,
-                                                                    'pinHash': null, // geändert
+                                                                    'pinHash': null,
                                                                 });
                                                             }
                                                         }
@@ -734,7 +840,7 @@ Widget build(BuildContext context) {
                                                             if (user != null) {
                                                                 await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
                                                                     'diskretModus': true,
-                                                                    'pinHash': newHash, // geändert
+                                                                    'pinHash': newHash,
                                                                 });
                                                             }
                                                         }
@@ -744,24 +850,24 @@ Widget build(BuildContext context) {
                                     ),
                                     if (_diskretModus && _isEditing)
                                         IconButton(
-                                            icon: const Icon(Icons.edit, color: Colors.white),
+                                            icon: Icon(Icons.edit, color: Colors.white, size: schriftProvider.allgemeineSchriftgroesse + 2),
                                             tooltip: 'PIN ändern',
                                             onPressed: _showPinChangeDialog,
                                         ),
                                 ],
                             ),
-                            const SizedBox(height: 32),
+                            SizedBox(height: 32),
 
                             // Bearbeiten/Speichern/Abbrechen Button-Logik
                             if (!_isEditing)
                                 ElevatedButton(
                                     onPressed: () => setState(() => _isEditing = true),
                                     style: ElevatedButton.styleFrom(
-                                        minimumSize: const Size.fromHeight(48),
+                                        minimumSize: Size.fromHeight(48 + schriftProvider.allgemeineSchriftgroesse),
                                         backgroundColor: favoriteButtonColor,
-                                        textStyle: const TextStyle(fontSize: 18),
+                                        textStyle: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse),
                                     ),
-                                    child: const Text('Bearbeiten'),
+                                    child: Text('Bearbeiten', style: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse)),
                                 )
                             else
                                 Row(
@@ -771,18 +877,18 @@ Widget build(BuildContext context) {
                                             onPressed: _isLoading ? null : _saveProfile,
                                             style: ElevatedButton.styleFrom(
                                                 backgroundColor: favoriteButtonColor,
-                                                minimumSize: const Size(120, 48),
-                                                textStyle: const TextStyle(fontSize: 18),
+                                                minimumSize: Size(120, 48 + schriftProvider.allgemeineSchriftgroesse),
+                                                textStyle: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse),
                                             ),
                                             child: _isLoading
-                                                ? const SizedBox(
+                                                ? SizedBox(
                                                     width: 18,
                                                     height: 18,
                                                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                                 )
-                                                : const Text('Speichern'),
+                                                : Text('Speichern', style: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse)),
                                         ),
-                                        const SizedBox(width: 16),
+                                        SizedBox(width: 16),
                                         OutlinedButton(
                                             onPressed: _isLoading
                                                 ? null
@@ -793,21 +899,22 @@ Widget build(BuildContext context) {
                                                     _loadProfileFromFirestore();
                                                 },
                                             style: OutlinedButton.styleFrom(
-                                                minimumSize: const Size(120, 48),
-                                                textStyle: const TextStyle(fontSize: 18),
+                                                minimumSize: Size(120, 48 + schriftProvider.allgemeineSchriftgroesse),
+                                                textStyle: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse),
                                             ),
-                                            child: const Text('Abbrechen'),
+                                            child: Text('Abbrechen', style: TextStyle(fontSize: schriftProvider.allgemeineSchriftgroesse)),
                                         ),
                                     ],
                                 ),
-                            const SizedBox(height: 32),
+                            SizedBox(height: 32),
                             TextButton(
                                 onPressed: _deleteProfile,
-                                child: const Text('Profil löschen', style: TextStyle(color: Colors.red)),
+                                child: Text('Profil löschen', style: TextStyle(color: Colors.red, fontSize: schriftProvider.allgemeineSchriftgroesse)),
                             ),
                         ],
+                      ),
                     ),
-                ),
+                  ),
         );
     }
 }

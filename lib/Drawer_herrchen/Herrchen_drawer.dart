@@ -229,7 +229,7 @@ class _HerrchenDrawerContentState extends State<HerrchenDrawerContent> {
                   ),
                   ListTile(
                     leading: const Icon(Icons.workspace_premium),
-                    title: const Text('Premium'),
+                    title: const Text('PawPass'),
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(

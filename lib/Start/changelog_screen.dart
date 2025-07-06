@@ -65,7 +65,18 @@ class ChangelogScreen extends StatelessWidget {
           "Bug behoben: Profilscreen – Burgermenü durch Zurückbutton ersetzt",
           "Neu: Adminpanel hinzugefügt – nur für Admins sichtbar"
         ]
-      }
+      },
+      {
+  "version": "0.0.389",
+  "changes": [
+    "Bug behoben im PawPassscreen: Ansicht optimiert",
+    "Anpassung Doggy Mein Screen: Punktestand dauerhaft sichtbar und integriert in die AppBar",
+    "Newsfeed-Benachrichtigungen eingeführt im Doggy Screen",
+    "Aufgaben im Doggy Screen besser dargestellt",
+    "Bonus-Anzeige für übererfüllte Aufgaben: Herrchen können künftig einstellen, dass Doggys für das Erledigen von mehr als der Mindestanforderung mit besonderen Belohnungen im Newsfeed belohnt werden — als Premium-Feature",
+    "Verbesserte Darstellung der Häufigkeit von Aufgaben + Anzeige, ob Aufgabe erledigt ist oder durch Herrchen erledigt werden muss (gesperrt)"
+  ]
+}
     ];
 
     return Scaffold(

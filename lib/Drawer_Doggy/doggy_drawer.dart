@@ -14,6 +14,7 @@ import '../feedback_or_support_screen.dart';
 import 'package:provider/provider.dart';
 import '../Settings/theme_provider.dart';
 import '../Settings/schriftgroesse_screen.dart';
+import '../Settings/premium_screen.dart';
 
 final Map<String, Color> colorMap = {
   'Rot': Colors.red,
@@ -191,17 +192,17 @@ Expanded(
                 });
               },
               children: [
-                ListTile(
-                  leading: const Icon(Icons.shop),
-                  title: const Text('Shop'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const DoggyShopScreen()),
-                    );
-                  },
-                ),
+          ListTile(
+            leading: const Icon(Icons.workspace_premium),
+            title: const Text('PawPass'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PremiumScreen()),
+              );
+            },
+          ),
               ],
             ),
             ExpansionTile(

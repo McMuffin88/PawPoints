@@ -10,13 +10,17 @@ import '../main.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import '../Start/bottom_navigator.dart';
-
+import 'package:provider/provider.dart';
+import '../Settings/schriftgroesse_provider.dart';
+import '../Settings/schriftgroesse_screen.dart';
+import '../Settings/premium_screen.dart';
 
 InputDecoration customFieldDecoration(
   String label,
   bool isEditing, {
   String? hintText,
   Widget? suffixIcon,
+  double? fontSize,
 }) {
   final borderRadius = BorderRadius.all(Radius.circular(isEditing ? 0 : 20));
   final borderColor = isEditing ? Colors.grey : Colors.transparent;
@@ -25,8 +29,8 @@ InputDecoration customFieldDecoration(
   return InputDecoration(
     labelText: label,
     hintText: hintText,
-    labelStyle: const TextStyle(color: Colors.white),
-    hintStyle: const TextStyle(color: Colors.white),
+    labelStyle: TextStyle(color: Colors.white, fontSize: fontSize),
+    hintStyle: TextStyle(color: Colors.white, fontSize: fontSize),
     filled: true,
     fillColor: const Color(0xFF29272C),
     enabledBorder: OutlineInputBorder(
@@ -67,11 +71,14 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
   DateTime? _geburtsdatum;
   String? _selectedGender;
   String? _selectedFavoriteColor;
-  String? _favoriteColorSaved; // <-- Wichtig für gespeicherte Buttonfarbe
+  String? _favoriteColorSaved;
   String? _profileImageUrl;
 
   bool _isEditing = false;
   bool _isLoading = false;
+
+  // Premium
+  bool _isPremium = false;
 
   // Diskret-Modus
   bool _diskretModus = false;
@@ -139,23 +146,32 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
           _geburtsdatum = (data['geburtsdatum'] as Timestamp).toDate();
         }
         _selectedGender = data['gender'];
-        _selectedFavoriteColor = data['favoriteColor'];
-        _favoriteColorSaved = data['favoriteColor']; // <--- für Button
+
+        // Premiumstatus prüfen
+        _isPremium = data['premium'] != null && data['premium']['doggy'] == true;
+
+        if (_isPremium) {
+          _selectedFavoriteColor = data['favoriteColor'] ?? 'Orange';
+        } else {
+          _selectedFavoriteColor = 'Orange';
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+            'favoriteColor': 'Orange',
+          });
+        }
+        _favoriteColorSaved = _selectedFavoriteColor;
         _profileImageUrl = data['profileImageUrl'];
 
         // Diskret-Modus laden
         _diskretModus = data['diskretModus'] ?? false;
-        _diskretPinHash = data['pinHash']; // !!! geändert von 'diskretPinHash' zu 'pinHash'
+        _diskretPinHash = data['pinHash'];
       }
     } on FirebaseException catch (e) {
-      print("Firebase Firestore Fehler beim Laden des Profils: ${e.code} - ${e.message}");
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Fehler beim Laden des Profils: ${e.message}')),
         );
       }
     } catch (e) {
-      print("Allgemeiner Fehler beim Laden des Profils: $e");
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Unerwarteter Fehler beim Laden des Profils: ${e.toString()}')),
@@ -208,14 +224,12 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
           );
         }
       } on FirebaseException catch (e) {
-        print("Firebase Storage Fehler beim Hochladen: ${e.code} - ${e.message}");
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Fehler beim Hochladen des Bildes: ${e.message}')),
           );
         }
       } catch (e) {
-        print("Allgemeiner Fehler beim Hochladen des Bildes: $e");
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Unerwarteter Fehler beim Hochladen: ${e.toString()}')),
@@ -258,6 +272,7 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
     }
 
     try {
+      final toSaveFavoriteColor = _isPremium ? _selectedFavoriteColor : 'Orange';
       await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
         'benutzername': _benutzernameController.text.trim(),
         'vorname': _vornameController.text.trim(),
@@ -266,12 +281,12 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
         'city': _cityController.text.trim(),
         'geburtsdatum': _geburtsdatum != null ? Timestamp.fromDate(_geburtsdatum!) : null,
         'gender': _selectedGender,
-        'favoriteColor': _selectedFavoriteColor,
-        // Diskret-Modus wird separat im Switch gehandhabt
+        'favoriteColor': toSaveFavoriteColor,
       });
       setState(() {
         _isEditing = false;
-        _favoriteColorSaved = _selectedFavoriteColor; // <-- Jetzt erst übernehmen!
+        _selectedFavoriteColor = toSaveFavoriteColor;
+        _favoriteColorSaved = toSaveFavoriteColor;
       });
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -279,14 +294,12 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
         );
       }
     } on FirebaseException catch (e) {
-      print("Firebase Firestore Fehler beim Speichern: ${e.code} - ${e.message}");
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Fehler beim Speichern: ${e.message}')),
         );
       }
     } catch (e) {
-      print("Allgemeiner Fehler beim Speichern des Profils: $e");
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Unerwarteter Fehler beim Speichern: ${e.toString()}')),
@@ -334,8 +347,10 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
             final storageRef = FirebaseStorage.instance.refFromURL(_profileImageUrl!);
             await storageRef.delete();
           } on FirebaseException catch (e) {
+            // ignore: avoid_print
             print("Warnung: Konnte Profilbild nicht aus Storage löschen: ${e.code} - ${e.message}");
           } catch (e) {
+            // ignore: avoid_print
             print("Warnung: Unerwarteter Fehler beim Löschen des Bildes aus Storage: $e");
           }
         }
@@ -344,7 +359,6 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
           await user.delete();
         } on FirebaseAuthException catch (e) {
           if (e.code == 'requires-recent-login') {
-            print("Fehler beim Löschen des Authentifizierungs-Benutzers: ${e.code} - ${e.message}");
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -354,7 +368,6 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
             }
             return;
           } else {
-            print("Firebase Auth Fehler beim Löschen des Benutzers: ${e.code} - ${e.message}");
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Fehler beim Löschen des Kontos: ${e.message}')),
@@ -363,7 +376,6 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
             return;
           }
         } catch (e) {
-          print("Allgemeiner Fehler beim Löschen des Authentifizierungs-Benutzers: $e");
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Unerwarteter Fehler beim Löschen des Kontos: ${e.toString()}')),
@@ -382,14 +394,12 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
           );
         }
       } on FirebaseException catch (e) {
-        print("Firebase Firestore Fehler beim Löschen des Profils: ${e.code} - ${e.message}");
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Fehler beim Löschen des Profils: ${e.message}')),
           );
         }
       } catch (e) {
-        print("Allgemeiner Fehler beim Löschen des Profils: $e");
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Unerwarteter Fehler beim Löschen: ${e.toString()}')),
@@ -441,29 +451,35 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context), // Abbruch
+            onPressed: () => Navigator.pop(context),
             child: const Text('Abbrechen'),
           ),
           ElevatedButton(
             onPressed: () async {
               if (newPinController.text.length < 6) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Der neue PIN muss mindestens 6 Ziffern lang sein.')),
-                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Der neue PIN muss mindestens 6 Ziffern lang sein.')),
+                  );
+                }
                 return;
               }
               if (_diskretPinHash != null) {
                 String oldHash = sha256.convert(utf8.encode(oldPinController.text)).toString();
                 if (oldPinController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Bitte den aktuellen PIN eingeben.')),
-                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Bitte den aktuellen PIN eingeben.')),
+                    );
+                  }
                   return;
                 }
                 if (oldHash != _diskretPinHash) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Der aktuelle PIN ist falsch!')),
-                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Der aktuelle PIN ist falsch!')),
+                    );
+                  }
                   return;
                 }
               }
@@ -471,16 +487,18 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
               final user = FirebaseAuth.instance.currentUser;
               if (user != null) {
                 await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-                  'pinHash': newHash,      // !!! geändert von 'diskretPinHash' zu 'pinHash'
+                  'pinHash': newHash,
                   'diskretModus': true,
                 });
                 setState(() {
                   _diskretPinHash = newHash;
                   _diskretModus = true;
                 });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('PIN erfolgreich geändert!')),
-                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('PIN erfolgreich geändert!')),
+                  );
+                }
               }
               Navigator.pop(context);
             },
@@ -510,22 +528,26 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context), // Abbruch
+            onPressed: () => Navigator.pop(context),
             child: const Text('Abbrechen'),
           ),
           ElevatedButton(
             onPressed: () {
               if (oldPinController.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Bitte den aktuellen PIN eingeben!')),
-                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Bitte den aktuellen PIN eingeben!')),
+                  );
+                }
                 return;
               }
               String hash = sha256.convert(utf8.encode(oldPinController.text)).toString();
               if (hash != _diskretPinHash) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('PIN falsch!')),
-                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('PIN falsch!')),
+                  );
+                }
                 return;
               }
               ok = true;
@@ -541,369 +563,462 @@ class _DoggyProfileScreenState extends State<DoggyProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final schriftProvider = Provider.of<SchriftgroesseProvider>(context);
+
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-  backgroundColor: Colors.transparent,
-  elevation: 0,
-  iconTheme: const IconThemeData(color: Colors.white),
-  leading: IconButton(
-    icon: const Icon(Icons.arrow_back),
-    onPressed: () {
-  Navigator.pushReplacement(
-  context, 
-  MaterialPageRoute(builder: (_) => BottomNavigator(role: "doggy"))
-      );
-    },
-  ),
-),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => BottomNavigator(role: "doggy"))
+            );
+          },
+        ),
+        actions: [
+          IconButton(
+            tooltip: "Schriftgröße anpassen",
+            icon: Icon(Icons.text_fields, color: Colors.white, size: schriftProvider.buttonSchriftgroesse + 2),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => SchriftgroesseScreen())
+              );
+            },
+          )
+        ],
+      ),
       drawer: buildDoggyDrawer(context),
       body: _isLoading && !_isEditing
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
+        padding: const EdgeInsets.all(16.0),
+        child: DefaultTextStyle(
+          style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              GestureDetector(
+                onTap: _isEditing ? _pickImage : null,
+                child: CircleAvatar(
+                  radius: 80,
+                  backgroundColor: _profileImageUrl == null ? Colors.grey[300] : null,
+                  backgroundImage: _profileImageUrl != null && _profileImageUrl!.startsWith('http')
+                      ? NetworkImage(_profileImageUrl!)
+                      : null,
+                  child: _profileImageUrl == null
+                      ? Icon(Icons.camera_alt, size: 50 + schriftProvider.buttonSchriftgroesse / 3, color: Colors.black54)
+                      : null,
+                ),
+              ),
+              SizedBox(height: 24),
+
+              // Benutzername
+              TextFormField(
+                controller: _benutzernameController,
+                decoration: customFieldDecoration(
+                  'Benutzername',
+                  _isEditing,
+                  hintText: 'Gib deinen gewünschten Benutzernamen ein',
+                  fontSize: schriftProvider.allgemeineSchriftgroesse,
+                ),
+                enabled: _isEditing,
+                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
+              ),
+              SizedBox(height: 12),
+
+              // Vorname
+              TextFormField(
+                controller: _vornameController,
+                decoration: customFieldDecoration(
+                  'Vorname',
+                  _isEditing,
+                  hintText: 'Gib deinen Vornamen ein',
+                  fontSize: schriftProvider.allgemeineSchriftgroesse,
+                ),
+                enabled: _isEditing,
+                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
+              ),
+              SizedBox(height: 12),
+
+              // Nachname
+              TextFormField(
+                controller: _nachnameController,
+                decoration: customFieldDecoration(
+                  'Nachname',
+                  _isEditing,
+                  hintText: 'Gib deinen Nachnamen ein',
+                  fontSize: schriftProvider.allgemeineSchriftgroesse,
+                ),
+                enabled: _isEditing,
+                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
+              ),
+              SizedBox(height: 12),
+
+              // PLZ
+              TextFormField(
+                controller: _plzController,
+                decoration: customFieldDecoration(
+                  'Postleitzahl',
+                  _isEditing,
+                  hintText: 'Gib deine Postleitzahl ein',
+                  fontSize: schriftProvider.allgemeineSchriftgroesse,
+                ),
+                keyboardType: TextInputType.number,
+                enabled: _isEditing,
+                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
+              ),
+              SizedBox(height: 12),
+
+              // Stadt
+              TextFormField(
+                controller: _cityController,
+                decoration: customFieldDecoration(
+                  'Stadt',
+                  _isEditing,
+                  hintText: 'In welcher Stadt wohnst du?',
+                  fontSize: schriftProvider.allgemeineSchriftgroesse,
+                ),
+                enabled: _isEditing,
+                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
+              ),
+              SizedBox(height: 12),
+
+              // Geburtsdatum
+              TextFormField(
+                readOnly: true,
+                enabled: _isEditing,
+                controller: TextEditingController(
+                  text: _geburtsdatum == null
+                      ? ''
+                      : DateFormat('dd.MM.yyyy').format(_geburtsdatum!),
+                ),
+                onTap: _isEditing ? () => _selectDate(context) : null,
+                decoration: customFieldDecoration(
+                  'Geburtsdatum',
+                  _isEditing,
+                  hintText: 'Geburtsdatum auswählen',
+                  fontSize: schriftProvider.allgemeineSchriftgroesse,
+                  suffixIcon: _isEditing
+                      ? Icon(Icons.calendar_today, color: Colors.brown, size: schriftProvider.allgemeineSchriftgroesse + 2)
+                      : null,
+                ),
+                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
+              ),
+              SizedBox(height: 12),
+
+              // Geschlecht
+              DropdownButtonFormField<String>(
+                value: ['männlich', 'weiblich', 'divers'].contains(_selectedGender) ? _selectedGender : null,
+                items: const [
+                  DropdownMenuItem(value: 'männlich', child: Text('Männlich', style: TextStyle(color: Colors.white))),
+                  DropdownMenuItem(value: 'weiblich', child: Text('Weiblich', style: TextStyle(color: Colors.white))),
+                  DropdownMenuItem(value: 'divers', child: Text('Divers', style: TextStyle(color: Colors.white))),
+                ],
+                onChanged: _isEditing ? (val) => setState(() => _selectedGender = val) : null,
+                decoration: customFieldDecoration(
+                  'Geschlecht',
+                  _isEditing,
+                  hintText: 'Wähle dein Geschlecht',
+                  fontSize: schriftProvider.allgemeineSchriftgroesse,
+                ),
+                hint: Text('Wähle dein Geschlecht', style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse)),
+                style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
+                dropdownColor: Colors.black,
+              ),
+              SizedBox(height: 12),
+
+              // Lieblingsfarbe mit Schloss + Stern, Dropdown, Hinweis (PawPass klickbar)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  GestureDetector(
-                    onTap: _isEditing ? _pickImage : null,
-                    child: CircleAvatar(
-                      radius: 80,
-                      backgroundColor: _profileImageUrl == null ? Colors.grey[300] : null,
-                      backgroundImage: _profileImageUrl != null && _profileImageUrl!.startsWith('http')
-                          ? NetworkImage(_profileImageUrl!)
-                          : null,
-                      child: _profileImageUrl == null
-                          ? const Icon(Icons.camera_alt, size: 50, color: Colors.black54)
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  TextFormField(
-                    controller: _benutzernameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Benutzername',
-                      hintText: 'Gib deinen gewünschten Benutzernamen ein',
-                      labelStyle: TextStyle(color: Color.fromARGB(255, 155, 154, 154)),
-                      hintStyle: TextStyle(color: Colors.grey),
-                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
-                      focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.brown)),
-                    ),
-                    enabled: _isEditing,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _vornameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Vorname',
-                      hintText: 'Gib deinen Vornamen ein',
-                      labelStyle: TextStyle(color: Color.fromARGB(255, 155, 154, 154)),
-                      hintStyle: TextStyle(color: Colors.grey),
-                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
-                      focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.brown)),
-                    ),
-                    enabled: _isEditing,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _nachnameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nachname',
-                      hintText: 'Gib deinen Nachnamen ein',
-                      labelStyle: TextStyle(color: Color.fromARGB(255, 155, 154, 154)),
-                      hintStyle: TextStyle(color: Colors.grey),
-                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
-                      focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.brown)),
-                    ),
-                    enabled: _isEditing,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _plzController,
-                    decoration: const InputDecoration(
-                      labelText: 'Postleitzahl',
-                      hintText: 'Gib deine Postleitzahl ein',
-                      labelStyle: TextStyle(color: Colors.white),
-                      hintStyle: TextStyle(color: Colors.grey),
-                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
-                      focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.brown)),
-                    ),
-                    keyboardType: TextInputType.number,
-                    enabled: _isEditing,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _cityController,
-                    decoration: const InputDecoration(
-                      labelText: 'Stadt',
-                      hintText: 'In welcher Stadt wohnst du?',
-                      labelStyle: TextStyle(color: Colors.white),
-                      hintStyle: TextStyle(color: Colors.grey),
-                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
-                      focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.brown)),
-                    ),
-                    enabled: _isEditing,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    readOnly: true,
-                    enabled: _isEditing,
-                    controller: TextEditingController(
-                      text: _geburtsdatum == null
-                          ? ''
-                          : DateFormat('dd.MM.yyyy').format(_geburtsdatum!),
-                    ),
-                    onTap: _isEditing ? () => _selectDate(context) : null,
-                    decoration: InputDecoration(
-                      labelText: 'Geburtsdatum',
-                      hintText: 'Geburtsdatum auswählen',
-                      labelStyle: const TextStyle(color: Colors.white),
-                      hintStyle: const TextStyle(color: Colors.white70),
-                      enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
-                      focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.brown)),
-                      suffixIcon: _isEditing
-                          ? const Icon(Icons.calendar_today, color: Colors.brown)
-                          : null,
-                    ),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: ['männlich', 'weiblich', 'divers'].contains(_selectedGender) ? _selectedGender : null,
-                    items: const [
-                      DropdownMenuItem(value: 'männlich', child: Text('Männlich', style: TextStyle(color: Colors.white))),
-                      DropdownMenuItem(value: 'weiblich', child: Text('Weiblich', style: TextStyle(color: Colors.white))),
-                      DropdownMenuItem(value: 'divers', child: Text('Divers', style: TextStyle(color: Colors.white))),
-                    ],
-                    onChanged: _isEditing ? (val) => setState(() => _selectedGender = val) : null,
-                    decoration: customFieldDecoration(
-                      'Geschlecht',
-                      _isEditing,
-                      hintText: 'Wähle dein Geschlecht',
-                    ),
-                    hint: const Text('Wähle dein Geschlecht', style: TextStyle(color: Colors.white)),
-                    style: const TextStyle(color: Colors.white),
-                    dropdownColor: Colors.black,
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: _selectedFavoriteColor,
-                    items: _colorMap.keys.map((colorName) {
-                      return DropdownMenuItem(
-                        value: colorName,
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 20,
-                              height: 20,
-                              margin: const EdgeInsets.only(right: 8),
-                              decoration: BoxDecoration(
-                                color: _colorMap[colorName] ?? Colors.transparent,
-                                border: Border.all(color: Colors.black),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                            Text(colorName, style: const TextStyle(color: Colors.white)),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: _isEditing
-                        ? (value) => setState(() {
-                            _selectedFavoriteColor = value;
-                          })
-                        : null,
-                    decoration: customFieldDecoration(
-                      'Lieblingsfarbe',
-                      _isEditing,
-                      hintText: 'Wähle deine Lieblingsfarbe',
-                      suffixIcon: _selectedFavoriteColor != null && _colorMap[_selectedFavoriteColor!] != null
-                          ? Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                              child: Container(
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  color: _colorMap[_selectedFavoriteColor!],
-                                  border: Border.all(color: Colors.black),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                            )
-                          : null,
-                    ),
-                    hint: const Text('Wähle deine Lieblingsfarbe', style: TextStyle(color: Colors.white)),
-                    style: const TextStyle(color: Colors.white),
-                    dropdownColor: Colors.black,
-                  ),
-                  const SizedBox(height: 24),
-                  // DISKRET-MODUS SWITCH + PIN ändern ICON
                   Row(
                     children: [
-                      Expanded(
-                        child: SwitchListTile(
-                          title: const Text('Diskret-Modus', style: TextStyle(color: Colors.white)),
-                          value: _diskretModus,
-                          onChanged: !_isEditing
-                              ? null
-                              : (val) async {
-                                  if (!val) {
-                                    // Nur beim Ausschalten: PIN-Abfrage!
-                                    if (_diskretPinHash != null) {
-                                      bool ok = await _showDisablePinDialog();
-                                      if (ok) {
-                                        setState(() {
-                                          _diskretModus = false;
-                                          _diskretPinHash = null;
-                                        });
-                                        final user = FirebaseAuth.instance.currentUser;
-                                        if (user != null) {
-                                          await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-                                            'diskretModus': false,
-                                            'pinHash': null,   // !!! geändert von 'diskretPinHash'
-                                          });
-                                        }
-                                      }
-                                      // Bei Abbruch bleibt der Switch AN!
-                                    } else {
-                                      // Wenn gar kein PIN gesetzt war, direkt ausschalten
-                                      setState(() {
-                                        _diskretModus = false;
-                                      });
-                                      final user = FirebaseAuth.instance.currentUser;
-                                      if (user != null) {
-                                        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-                                          'diskretModus': false,
-                                          'pinHash': null,   // !!! geändert von 'diskretPinHash'
-                                        });
-                                      }
-                                    }
-                                  } else {
-                                    // Beim Aktivieren des Diskret-Modus immer PIN festlegen!
-                                    final TextEditingController newPinController = TextEditingController();
-                                    final result = await showDialog(
-                                      context: context,
-                                      builder: (context) => AlertDialog(
-                                        title: const Text('PIN festlegen'),
-                                        content: TextField(
-                                          controller: newPinController,
-                                          obscureText: true,
-                                          keyboardType: TextInputType.number,
-                                          maxLength: 8,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Neuer PIN',
-                                            hintText: 'Mindestens 6 Ziffern',
-                                            counterText: '',
-                                          ),
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () => Navigator.pop(context, false),
-                                            child: const Text('Abbrechen'),
-                                          ),
-                                          ElevatedButton(
-                                            onPressed: () {
-                                              if (newPinController.text.length < 6) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(content: Text('Die PIN muss mindestens 6 Ziffern lang sein.')),
-                                                );
-                                                return;
-                                              }
-                                              Navigator.pop(context, true);
-                                            },
-                                            child: const Text('Festlegen'),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                    if (result == true && newPinController.text.length >= 6) {
-                                      final String newHash = sha256.convert(utf8.encode(newPinController.text)).toString();
-                                      setState(() {
-                                        _diskretModus = true;
-                                        _diskretPinHash = newHash;
-                                      });
-                                      final user = FirebaseAuth.instance.currentUser;
-                                      if (user != null) {
-                                        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-                                          'diskretModus': true,
-                                          'pinHash': newHash,   // !!! geändert von 'diskretPinHash'
-                                        });
-                                      }
-                                    }
-                                  }
-                                },
+                      Icon(Icons.lock, color: Colors.orange, size: schriftProvider.allgemeineSchriftgroesse),
+                      SizedBox(width: 6),
+                      Text(
+                        'Lieblingsfarbe',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: schriftProvider.allgemeineSchriftgroesse,
                         ),
                       ),
-                      if (_diskretModus && _isEditing)
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.white),
-                          tooltip: 'PIN ändern',
-                          onPressed: _showPinChangeDialog,
+                      Text(
+                        '*',
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: schriftProvider.allgemeineSchriftgroesse,
+                          fontWeight: FontWeight.bold,
                         ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 32),
-                  // Bearbeiten/Speichern/Abbrechen Button-Logik
-                  if (!_isEditing)
-                    ElevatedButton(
-                      onPressed: () => setState(() => _isEditing = true),
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        backgroundColor: favoriteButtonColor,
-                        textStyle: const TextStyle(fontSize: 18),
-                      ),
-                      child: const Text('Bearbeiten'),
-                    )
-                  else
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ElevatedButton(
-                          onPressed: _isLoading ? null : _saveProfile,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: favoriteButtonColor,
-                            minimumSize: const Size(120, 48),
-                            textStyle: const TextStyle(fontSize: 18),
-                          ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  SizedBox(height: 4),
+                  IgnorePointer(
+                    ignoring: !_isPremium || !_isEditing,
+                    child: Opacity(
+                      opacity: (_isPremium && _isEditing) ? 1.0 : 0.5,
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedFavoriteColor,
+                        items: _colorMap.keys.map((colorName) {
+                          return DropdownMenuItem(
+                            value: colorName,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  margin: const EdgeInsets.only(right: 8),
+                                  decoration: BoxDecoration(
+                                    color: _colorMap[colorName] ?? Colors.transparent,
+                                    border: Border.all(color: Colors.black),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                                Text(colorName, style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse)),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (_isPremium && _isEditing)
+                            ? (value) => setState(() {
+                                _selectedFavoriteColor = value;
+                              })
+                            : null,
+                        decoration: customFieldDecoration(
+                          '', // Label steht schon oben
+                          _isEditing,
+                          hintText: 'Wähle deine Lieblingsfarbe',
+                          fontSize: schriftProvider.allgemeineSchriftgroesse,
+                          suffixIcon: _selectedFavoriteColor != null && _colorMap[_selectedFavoriteColor!] != null
+                              ? Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                  child: Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: _colorMap[_selectedFavoriteColor!],
+                                      border: Border.all(color: Colors.black),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
                                 )
-                              : const Text('Speichern'),
+                              : null,
                         ),
-                        const SizedBox(width: 16),
-                        OutlinedButton(
-                          onPressed: _isLoading
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _isEditing = false;
-                                  });
-                                  _loadProfileFromFirestore(); // Reset Felder!
-                                },
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(120, 48),
-                            textStyle: const TextStyle(fontSize: 18),
-                          ),
-                          child: const Text('Abbrechen'),
-                        ),
-                      ],
+                        hint: Text('Wähle deine Lieblingsfarbe', style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse)),
+                        style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse),
+                        dropdownColor: Colors.black,
+                      ),
                     ),
-                  const SizedBox(height: 32),
-                  TextButton(
-                    onPressed: _deleteProfile,
-                    child: const Text('Profil löschen', style: TextStyle(color: Colors.red)),
                   ),
+                  if (!_isPremium)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Wrap(
+                        alignment: WrapAlignment.start,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            'Lieblingsfarbe ändern nur mit ',
+                            style: TextStyle(
+                              color: Colors.orange,
+                              fontWeight: FontWeight.w500,
+                              fontSize: schriftProvider.allgemeineSchriftgroesse,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => PremiumScreen()),
+                              );
+                            },
+                            child: Text(
+                              'PawPass',
+                              style: TextStyle(
+                                color: Colors.orange,
+                                decoration: TextDecoration.underline,
+                                fontWeight: FontWeight.bold,
+                                fontSize: schriftProvider.allgemeineSchriftgroesse,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            ' möglich.',
+                            style: TextStyle(
+                              color: Colors.orange,
+                              fontWeight: FontWeight.w500,
+                              fontSize: schriftProvider.allgemeineSchriftgroesse,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
-            ),
+              SizedBox(height: 24),
+
+              // DISKRET-MODUS SWITCH + PIN ändern ICON
+              Row(
+                children: [
+                  Expanded(
+                    child: SwitchListTile(
+                      title: Text('Diskret-Modus', style: TextStyle(color: Colors.white, fontSize: schriftProvider.allgemeineSchriftgroesse)),
+                      value: _diskretModus,
+                      onChanged: !_isEditing
+                          ? null
+                          : (val) async {
+                        if (!val) {
+                          if (_diskretPinHash != null) {
+                            bool ok = await _showDisablePinDialog();
+                            if (ok) {
+                              setState(() {
+                                _diskretModus = false;
+                                _diskretPinHash = null;
+                              });
+                              final user = FirebaseAuth.instance.currentUser;
+                              if (user != null) {
+                                await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                                  'diskretModus': false,
+                                  'pinHash': null,
+                                });
+                              }
+                            }
+                          } else {
+                            setState(() { _diskretModus = false; });
+                            final user = FirebaseAuth.instance.currentUser;
+                            if (user != null) {
+                              await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                                'diskretModus': false,
+                                'pinHash': null,
+                              });
+                            }
+                          }
+                        } else {
+                          final TextEditingController newPinController = TextEditingController();
+                          final result = await showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('PIN festlegen'),
+                              content: TextField(
+                                controller: newPinController,
+                                obscureText: true,
+                                keyboardType: TextInputType.number,
+                                maxLength: 8,
+                                decoration: const InputDecoration(
+                                  labelText: 'Neuer PIN',
+                                  hintText: 'Mindestens 6 Ziffern',
+                                  counterText: '',
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, false),
+                                  child: const Text('Abbrechen'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    if (newPinController.text.length < 6) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Die PIN muss mindestens 6 Ziffern lang sein.')),
+                                      );
+                                      return;
+                                    }
+                                    Navigator.pop(context, true);
+                                  },
+                                  child: const Text('Festlegen'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (result == true && newPinController.text.length >= 6) {
+                            final String newHash = sha256.convert(utf8.encode(newPinController.text)).toString();
+                            setState(() {
+                              _diskretModus = true;
+                              _diskretPinHash = newHash;
+                            });
+                            final user = FirebaseAuth.instance.currentUser;
+                            if (user != null) {
+                              await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                                'diskretModus': true,
+                                'pinHash': newHash,
+                              });
+                            }
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                  if (_diskretModus && _isEditing)
+                    IconButton(
+                      icon: Icon(Icons.edit, color: Colors.white, size: schriftProvider.allgemeineSchriftgroesse + 2),
+                      tooltip: 'PIN ändern',
+                      onPressed: _showPinChangeDialog,
+                    ),
+                ],
+              ),
+              SizedBox(height: 32),
+
+              // Bearbeiten/Speichern/Abbrechen Button-Logik
+              if (!_isEditing)
+                ElevatedButton(
+                  onPressed: () => setState(() => _isEditing = true),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: Size.fromHeight(48 + schriftProvider.buttonSchriftgroesse),
+                    backgroundColor: favoriteButtonColor,
+                    textStyle: TextStyle(fontSize: schriftProvider.buttonSchriftgroesse),
+                  ),
+                  child: Text('Bearbeiten', style: TextStyle(fontSize: schriftProvider.buttonSchriftgroesse)),
+                )
+              else
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _saveProfile,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: favoriteButtonColor,
+                        minimumSize: Size(120, 48 + schriftProvider.buttonSchriftgroesse),
+                        textStyle: TextStyle(fontSize: schriftProvider.buttonSchriftgroesse),
+                      ),
+                      child: _isLoading
+                          ? SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : Text('Speichern', style: TextStyle(fontSize: schriftProvider.buttonSchriftgroesse)),
+                    ),
+                    SizedBox(width: 16),
+                    OutlinedButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              setState(() {
+                                _isEditing = false;
+                              });
+                              _loadProfileFromFirestore();
+                            },
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: Size(120, 48 + schriftProvider.buttonSchriftgroesse),
+                        textStyle: TextStyle(fontSize: schriftProvider.buttonSchriftgroesse),
+                      ),
+                      child: Text('Abbrechen', style: TextStyle(fontSize: schriftProvider.buttonSchriftgroesse)),
+                    ),
+                  ],
+                ),
+              SizedBox(height: 32),
+              TextButton(
+                onPressed: _deleteProfile,
+                child: Text('Profil löschen', style: TextStyle(color: Colors.red, fontSize: schriftProvider.allgemeineSchriftgroesse)),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
